@@ -1,0 +1,1 @@
+# Pipeline stages (Phase 4): discover.ts, verify.ts — separate, idempotent stages.

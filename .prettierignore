@@ -1,0 +1,14 @@
+# Generated / vendored
+node_modules
+.next
+out
+build
+dist
+coverage
+package-lock.json
+
+# Migration files
+src/core/db/migrations
+
+# Local planning docs
+docs
