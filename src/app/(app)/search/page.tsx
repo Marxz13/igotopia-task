@@ -55,8 +55,12 @@ export default function SearchPage() {
     try {
       const res = await createSearch(request, idemKey);
       rotateIdemKey(activeOrgId); // server acknowledged - safe to start a fresh key
-      await refreshMe(); // reflect the charge in the credits pill
-      setJobId(res.jobId);
+      setJobId(res.jobId); // search succeeded - commit it before the best-effort refresh
+      try {
+        await refreshMe(); // reflect the charge in the credits pill
+      } catch {
+        // a credits-refresh failure must not surface as a failed search
+      }
     } catch (err) {
       if (err instanceof ApiError && err.status === 402) {
         await refreshMe();
