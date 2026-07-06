@@ -37,16 +37,19 @@ export function JobProgress({
     if (failed) failRef.current?.focus();
   }, [failed]);
 
-  const [cancelling, setCancelling] = useState(false);
+  // Sticky from the click until the poll flips the job to a terminal state, so the UI
+  // keeps reading "Cancelling…" across the gap between the request returning and the
+  // worker actually stopping the stage (up to one poll interval later).
+  const [cancelRequested, setCancelRequested] = useState(false);
+  useEffect(() => setCancelRequested(false), [jobId]); // reset if this panel is reused
   async function handleCancel() {
-    if (cancelling) return;
-    setCancelling(true);
+    if (cancelRequested) return;
+    setCancelRequested(true);
     try {
       await cancelJob(jobId);
+      // leave it set; the next poll will show `cancelled`
     } catch {
-      // polling will reflect the real state; nothing to surface here
-    } finally {
-      setCancelling(false);
+      setCancelRequested(false); // request failed — let the user try again
     }
   }
 
@@ -58,6 +61,8 @@ export function JobProgress({
   const active = status === 'queued' || status === 'discovering' || status === 'verifying';
   const completed = status === 'completed';
   const cancelled = status === 'cancelled';
+  // UI-only transient: cancel is in flight but the job hasn't reached `cancelled` yet.
+  const cancelling = cancelRequested && active;
 
   const stageWord =
     status === 'verifying'
@@ -91,7 +96,11 @@ export function JobProgress({
           </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <Badge tone={jobTone(status)} label={jobLabel(status)} plain />
+          <Badge
+            tone={cancelling ? 'cancel' : jobTone(status)}
+            label={cancelling ? 'Cancelling…' : jobLabel(status)}
+            plain
+          />
           {active && (
             <button
               type="button"
@@ -183,7 +192,7 @@ export function JobProgress({
             }}
           >
             <span className="spinner" aria-hidden="true" />
-            <span>{stageWord}</span>
+            <span>{cancelling ? 'Cancelling…' : stageWord}</span>
           </div>
           <div style={{ marginTop: 8, fontSize: 12, color: 'var(--muted-2)' }}>
             Polling every ~1.5s · stops automatically when the job reaches a terminal state.
