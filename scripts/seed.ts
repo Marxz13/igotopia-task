@@ -1,4 +1,5 @@
 // Entry point for `npm run seed`. Seeds the two demo orgs, users, and memberships.
+import 'dotenv/config'; // load .env so `npm run seed` needs no manual env sourcing
 import { closeDb, getDb } from '@/core/db/client';
 import { memberships, organizations, users } from '@/core/db/schema';
 
@@ -37,7 +38,9 @@ async function main(): Promise<void> {
     ])
     .onConflictDoNothing();
 
-  console.log('[seed] ok — Marz Labs(10)/Allan Inc(1), marz(Marz Labs), allan(Marz Labs+Allan Inc)');
+  console.log(
+    '[seed] ok — Marz Labs(10)/Allan Inc(1), marz(Marz Labs), allan(Marz Labs+Allan Inc)',
+  );
 }
 
 main()

@@ -1,3 +1,4 @@
+import 'dotenv/config'; // load .env so `npm run migrate` picks up a custom DATABASE_URL
 import { defineConfig } from 'drizzle-kit';
 
 // drizzle-kit config for `generate` (build migrations offline from the schema) and
