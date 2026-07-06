@@ -158,6 +158,34 @@ export const creditLedger = pgTable(
   ],
 );
 
+// Append-only run log for a job. Unlike leads this does NOT dedup: a crash/retry
+// re-run appends fresh rows, which is exactly how "previous runs" become visible in
+// the timeline. Denormalized organization_id gives org-scoped reads like leads.
+export const jobEvents = pgTable(
+  'job_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    type: text('type').notNull(),
+    message: text('message').notNull(),
+    data: jsonb('data').$type<Record<string, number | string | boolean>>(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('job_events_job_created_idx').on(t.jobId, t.createdAt),
+    index('job_events_org_idx').on(t.organizationId),
+    check(
+      'job_events_type_chk',
+      sql`${t.type} in ('queued','discovering','discovered','verifying','completed','failed','crashed','recovered','retry','cancelled')`,
+    ),
+  ],
+);
+
 export type Organization = typeof organizations.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Membership = typeof memberships.$inferSelect;
@@ -165,3 +193,4 @@ export type Session = typeof sessions.$inferSelect;
 export type JobRow = typeof jobs.$inferSelect;
 export type LeadRow = typeof leads.$inferSelect;
 export type CreditLedgerRow = typeof creditLedger.$inferSelect;
+export type JobEventRow = typeof jobEvents.$inferSelect;

@@ -22,6 +22,20 @@ export const jobStatusSchema = z.enum([
 
 export const leadStateSchema = z.enum(['unverified_raw', 'verified', 'rejected']);
 
+// One entry in a job's run log. Mirrors the job_events.type CHECK constraint.
+export const jobEventTypeSchema = z.enum([
+  'queued',
+  'discovering',
+  'discovered',
+  'verifying',
+  'completed',
+  'failed',
+  'crashed',
+  'recovered',
+  'retry',
+  'cancelled',
+]);
+
 // Error codes. The code is machine-readable; the message is display-only.
 export const errorCodeSchema = z.enum([
   'validation_error', // 400
@@ -119,7 +133,8 @@ export const leadsQuerySchema = z.object({
 });
 
 // Endpoint response bodies
-// POST /api/searches -> 201 (created) or 200 (idempotent replay of same job).
+// POST /api/searches -> 202 (accepted, runs in the background) or 200 (idempotent
+// replay of the same job).
 export const createSearchResponseSchema = z.object({
   jobId: uuid,
   status: jobStatusSchema,
@@ -131,4 +146,18 @@ export const jobsResponseSchema = z.object({
 
 export const leadsResponseSchema = z.object({
   leads: z.array(leadSchema),
+});
+
+// One row of a job's run log, as the timeline UI reads it.
+export const jobEventSchema = z.object({
+  id: uuid,
+  type: jobEventTypeSchema,
+  message: z.string(),
+  data: z.record(z.union([z.number(), z.string(), z.boolean()])).nullable(),
+  createdAt: isoDateTime,
+});
+
+// GET /api/jobs/:id/events -> the job's run log, oldest first.
+export const jobEventsResponseSchema = z.object({
+  events: z.array(jobEventSchema),
 });

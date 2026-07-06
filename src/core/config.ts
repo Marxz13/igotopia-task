@@ -11,6 +11,12 @@ const envSchema = z.object({
   SESSION_SECRET: z.string().min(16),
   PROVIDER_MODE: z.enum(['mock', 'real']).default('mock'),
   WORKER_CONCURRENCY: z.coerce.number().int().positive().default(5),
+  // BullMQ key prefix. Tests use a separate prefix so a dev worker running against the
+  // same Redis can never pick up test-enqueued jobs and race the assertions.
+  QUEUE_PREFIX: z.string().min(1).default('bull'),
+  // Artificial per-stage pause (ms) so discover/verify are watchable and cancellable
+  // in a demo. Defaults to 0 so tests stay fast; the local .env sets 2000.
+  STAGE_DELAY_MS: z.coerce.number().int().nonnegative().default(0),
   // Crash hook: the discover stage exits right after inserting leads, to prove a
   // restart doesn't duplicate. Explicit truthy values only, since a coerced boolean
   // would treat "0"/"false" as true.

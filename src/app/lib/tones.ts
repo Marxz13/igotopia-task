@@ -2,7 +2,7 @@
 // lead badges, and the stage rail so colors stay consistent.
 
 import type { CSSProperties } from 'react';
-import type { JobStatus, LeadState } from '@/core/contract';
+import type { JobEventType, JobStatus, LeadState } from '@/core/contract';
 
 export type Tone = 'neutral' | 'active' | 'success' | 'error' | 'cancel';
 
@@ -79,6 +79,25 @@ export const JOB_TERMINAL: ReadonlySet<JobStatus> = new Set<JobStatus>([
 
 export function isTerminalStatus(status: JobStatus): boolean {
   return JOB_TERMINAL.has(status);
+}
+
+// Run-log event presentation. recovered/retry use the amber 'cancel' tone so an
+// interruption+recovery stands out in the timeline without reading as an error.
+const EVENT_TONE: Record<JobEventType, Tone> = {
+  queued: 'neutral',
+  discovering: 'active',
+  discovered: 'active',
+  verifying: 'active',
+  completed: 'success',
+  failed: 'error',
+  crashed: 'error',
+  recovered: 'cancel',
+  retry: 'cancel',
+  cancelled: 'cancel',
+};
+
+export function eventTone(type: JobEventType): Tone {
+  return EVENT_TONE[type];
 }
 
 // Lead state presentation

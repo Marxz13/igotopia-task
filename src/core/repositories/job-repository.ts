@@ -58,6 +58,57 @@ export async function setJobStatus(
     .where(eq(jobs.id, jobId));
 }
 
+/** Conditional advance: moves the row only if it is still in `from`. Returns true if
+ * it moved. Lets a concurrent cancel win — the worker can't clobber a cancelled job.
+ * A same-state advance (from === to) is an idempotent no-op that still returns true. */
+export async function advanceJobStatus(
+  jobId: string,
+  from: JobStatus,
+  to: JobStatus,
+  patch: JobStatusPatch = {},
+): Promise<boolean> {
+  const rows = await getDb()
+    .update(jobs)
+    .set({
+      status: to,
+      updatedAt: new Date(),
+      ...(patch.startedAt ? { startedAt: patch.startedAt } : {}),
+      ...(patch.completedAt ? { completedAt: patch.completedAt } : {}),
+      ...('error' in patch ? { error: patch.error ?? null } : {}),
+    })
+    .where(and(eq(jobs.id, jobId), eq(jobs.status, from)))
+    .returning();
+  return rows.length > 0;
+}
+
+/** Org-scoped cancel: flips a still-running job to cancelled. Returns the updated row,
+ * or null when the job doesn't exist for this org or is already terminal. */
+export async function cancelJob(orgId: string, jobId: string): Promise<JobRow | null> {
+  const rows = await getDb()
+    .update(jobs)
+    .set({ status: 'cancelled', completedAt: new Date(), updatedAt: new Date() })
+    .where(
+      and(
+        eq(jobs.id, jobId),
+        eq(jobs.organizationId, orgId),
+        inArray(jobs.status, ['queued', 'discovering', 'verifying']),
+      ),
+    )
+    .returning();
+  return rows[0] ?? null;
+}
+
+/** System-scoped status read, used by the worker's cooperative cancellation checks. */
+export async function getJobStatusSystem(jobId: string): Promise<JobStatus | null> {
+  const rows = await getDb()
+    .select({ status: jobs.status })
+    .from(jobs)
+    .where(eq(jobs.id, jobId))
+    .limit(1);
+  const status = rows[0]?.status;
+  return status ? (status as JobStatus) : null;
+}
+
 export async function setDiscoveredCount(jobId: string, discoveredCount: number): Promise<void> {
   await getDb()
     .update(jobs)

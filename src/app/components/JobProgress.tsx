@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Job } from '@/core/contract';
-import { getJob } from '@/app/lib/api';
+import { cancelJob, getJob } from '@/app/lib/api';
 import { usePolling } from '@/app/hooks/use-polling';
 import { isTerminalStatus, jobLabel, jobTone, stageRail } from '@/app/lib/tones';
 import { Badge } from '@/app/components/Badge';
+import { JobTimeline } from '@/app/components/JobTimeline';
 
 const POLL_INTERVAL_MS = 1500;
 
@@ -36,6 +37,19 @@ export function JobProgress({
     if (failed) failRef.current?.focus();
   }, [failed]);
 
+  const [cancelling, setCancelling] = useState(false);
+  async function handleCancel() {
+    if (cancelling) return;
+    setCancelling(true);
+    try {
+      await cancelJob(jobId);
+    } catch {
+      // polling will reflect the real state; nothing to surface here
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   // Until the first poll lands, show the job as freshly queued.
   const status = data?.status ?? 'queued';
   const discovered = data?.discoveredCount ?? 0;
@@ -43,6 +57,7 @@ export function JobProgress({
   const rejected = data?.rejectedCount ?? 0;
   const active = status === 'queued' || status === 'discovering' || status === 'verifying';
   const completed = status === 'completed';
+  const cancelled = status === 'cancelled';
 
   const stageWord =
     status === 'verifying'
@@ -75,7 +90,35 @@ export function JobProgress({
             #{jobId.slice(0, 6)}
           </span>
         </div>
-        <Badge tone={jobTone(status)} label={jobLabel(status)} plain />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Badge tone={jobTone(status)} label={jobLabel(status)} plain />
+          {active && (
+            <button
+              type="button"
+              onClick={() => void handleCancel()}
+              disabled={cancelling}
+              aria-label="Cancel job"
+              title="Cancel this job"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '4px 10px',
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#b54708',
+                background: '#fffaeb',
+                border: '1px solid #fedf89',
+                borderRadius: 8,
+                cursor: cancelling ? 'default' : 'pointer',
+                opacity: cancelling ? 0.6 : 1,
+              }}
+            >
+              <span aria-hidden="true">✕</span>
+              {cancelling ? 'Cancelling…' : 'Cancel'}
+            </button>
+          )}
+        </div>
       </div>
 
       {active && (
@@ -191,6 +234,13 @@ export function JobProgress({
         </div>
       )}
 
+      {cancelled && (
+        <div style={{ marginTop: 14, fontSize: 14, color: '#b54708', fontWeight: 600 }}>
+          Cancelled. Last counts - discovered {discovered}, verified {verified}, rejected {rejected}
+          .
+        </div>
+      )}
+
       {failed && (
         <div
           role="alert"
@@ -223,6 +273,8 @@ export function JobProgress({
           </button>
         </div>
       )}
+
+      <JobTimeline jobId={jobId} />
     </div>
   );
 }

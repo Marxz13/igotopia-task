@@ -1,6 +1,7 @@
 import { getLogger } from '@/core/logger';
 import { enqueueDiscover, enqueueVerify } from '@/core/queue/producer';
 import { getDiscoverQueue, getVerifyQueue } from '@/core/queue/queues';
+import { appendJobEvent } from '@/core/repositories/job-event-repository';
 import { listNonTerminalJobs } from '@/core/repositories/job-repository';
 
 // Reconciler for the enqueue-after-commit gap (DB committed, enqueue lost -> job
@@ -15,11 +16,23 @@ export async function runSweep(): Promise<number> {
     if (job.status === 'queued' || job.status === 'discovering') {
       if (!(await getDiscoverQueue().getJob(`discover-${job.id}`))) {
         await enqueueDiscover(job.id);
+        await appendJobEvent(
+          job.organizationId,
+          job.id,
+          'recovered',
+          'Re-enqueued discovery after an interruption',
+        );
         reenqueued++;
       }
     } else if (job.status === 'verifying') {
       if (!(await getVerifyQueue().getJob(`verify-${job.id}`))) {
         await enqueueVerify(job.id);
+        await appendJobEvent(
+          job.organizationId,
+          job.id,
+          'recovered',
+          'Re-enqueued verification after an interruption',
+        );
         reenqueued++;
       }
     }

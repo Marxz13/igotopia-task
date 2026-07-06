@@ -5,6 +5,7 @@ import { creditLedger, jobs, organizations } from '@/core/db/schema';
 import { InsufficientCreditsError } from '@/core/errors';
 import { getLogger } from '@/core/logger';
 import { enqueueDiscover } from '@/core/queue/producer';
+import { appendJobEvent } from '@/core/repositories/job-event-repository';
 
 // The money path. One Postgres transaction atomically creates the job, charges
 // one credit, and writes the ledger row, or rolls it all back. No provider work
@@ -83,9 +84,21 @@ export async function startSearch(input: StartSearchInput): Promise<StartSearchR
     return { jobId: jobRow.id, status: 'queued' as JobStatus, replayed: false };
   });
 
-  // 4. Enqueue AFTER commit (the enqueue-after-commit gap is covered by the sweeper).
-  //    Deterministic jobId makes a replay's re-enqueue a harmless no-op.
-  await enqueueDiscover(result.jobId);
+  // 4. Enqueue AFTER commit, best-effort. The committed job is the source of truth, so
+  //    the jobId is returned no matter what happens here; if this throws (e.g. a Redis
+  //    blip) the sweeper re-enqueues the stuck job within its interval. Deterministic
+  //    jobId makes a replay's re-enqueue a harmless no-op.
+  if (!result.replayed) {
+    await appendJobEvent(input.orgId, result.jobId, 'queued', 'Search queued');
+  }
+  try {
+    await enqueueDiscover(result.jobId);
+  } catch (err) {
+    getLogger().warn(
+      { jobId: result.jobId, err: err instanceof Error ? err.message : String(err) },
+      'enqueue failed after commit — sweeper will recover',
+    );
+  }
   getLogger().info(
     { jobId: result.jobId, orgId: input.orgId, replayed: result.replayed },
     'search started',

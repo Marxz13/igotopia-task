@@ -23,7 +23,9 @@ export const ALLAN = 'a2a2a2a2-0000-4000-8000-000000000001';
 // Redis so no stale BullMQ jobs leak between tests.
 export async function resetDb(): Promise<void> {
   const db = getDb();
-  await db.execute(sql`TRUNCATE leads, credit_ledger, jobs, sessions RESTART IDENTITY CASCADE`);
+  await db.execute(
+    sql`TRUNCATE leads, credit_ledger, job_events, jobs, sessions RESTART IDENTITY CASCADE`,
+  );
   await db
     .insert(organizations)
     .values([

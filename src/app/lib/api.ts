@@ -6,12 +6,14 @@ import {
   createSearchResponseSchema,
   errorResponseSchema,
   jobSchema,
+  jobEventsResponseSchema,
   jobsResponseSchema,
   leadsResponseSchema,
   meSchema,
   type CreateSearchResponse,
   type ErrorCode,
   type Job,
+  type JobEvent,
   type Lead,
   type LeadState,
   type Me,
@@ -112,6 +114,16 @@ export async function createSearch(
 
 export async function getJob(id: string, signal?: AbortSignal): Promise<Job> {
   const data = await request(`/api/jobs/${id}`, signal ? { signal } : {});
+  return jobSchema.parse(data);
+}
+
+export async function getJobEvents(id: string, signal?: AbortSignal): Promise<JobEvent[]> {
+  const data = await request(`/api/jobs/${id}/events`, signal ? { signal } : {});
+  return jobEventsResponseSchema.parse(data).events;
+}
+
+export async function cancelJob(id: string): Promise<Job> {
+  const data = await request(`/api/jobs/${id}/cancel`, { method: 'POST' });
   return jobSchema.parse(data);
 }
 

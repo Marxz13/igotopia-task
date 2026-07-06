@@ -4,6 +4,7 @@ import { closeDb } from '@/core/db/client';
 import { getLogger } from '@/core/logger';
 import { closeRedis, getRedis } from '@/core/queue/connection';
 import { QUEUE_NAMES, type StageJobData } from '@/core/queue/queues';
+import { appendJobEvent } from '@/core/repositories/job-event-repository';
 import { findJobByIdSystem, setJobStatus } from '@/core/repositories/job-repository';
 import { CrashAfterDiscover } from './crash-signal';
 import { runDiscoverStage } from './stages/discover';
@@ -18,9 +19,9 @@ const SWEEP_INTERVAL_MS = 10_000;
 
 export async function runWorker(): Promise<void> {
   const log = getLogger();
-  const { WORKER_CONCURRENCY } = loadConfig();
+  const { WORKER_CONCURRENCY, QUEUE_PREFIX } = loadConfig();
   const connection = getRedis();
-  const opts = { connection, concurrency: WORKER_CONCURRENCY };
+  const opts = { connection, concurrency: WORKER_CONCURRENCY, prefix: QUEUE_PREFIX };
 
   const discoverWorker = new Worker<StageJobData>(
     QUEUE_NAMES.discover,
@@ -53,13 +54,30 @@ export async function runWorker(): Promise<void> {
 
     // Only after all retries are exhausted do we mark the job failed (readable error
     // surfaced to the UI); earlier attempts just log and let BullMQ back off + retry.
+    const current = await findJobByIdSystem(jobId);
+    const org = current?.organizationId;
     if (job.attemptsMade >= (job.opts.attempts ?? 1)) {
-      const current = await findJobByIdSystem(jobId);
       if (current && !isTerminal(current.status)) {
         await setJobStatus(jobId, 'failed', { error: err.message });
+        if (org) {
+          await appendJobEvent(
+            org,
+            jobId,
+            'failed',
+            `Failed after ${job.attemptsMade} attempt${job.attemptsMade === 1 ? '' : 's'}: ${err.message}`,
+          );
+        }
       }
       log.error({ jobId, queue, err: err.message }, 'job failed (attempts exhausted)');
     } else {
+      if (org && current && !isTerminal(current.status)) {
+        await appendJobEvent(
+          org,
+          jobId,
+          'retry',
+          `Attempt ${job.attemptsMade} failed, retrying: ${err.message}`,
+        );
+      }
       log.warn(
         { jobId, queue, attempt: job.attemptsMade, err: err.message },
         'job attempt failed — retrying',
