@@ -131,7 +131,7 @@ export default function SearchPage() {
               </div>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <label htmlFor="ld-region" className="field-label">
-                  Region <span className="hint">- free text</span>
+                  Region
                 </label>
                 <input
                   id="ld-region"
