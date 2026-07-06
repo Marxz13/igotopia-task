@@ -81,7 +81,9 @@ async function mockDiscover(input: SearchRequest, jobId: string): Promise<Candid
     }
   }
 
-  return out;
+  // Brief caps discovery at 0-50 candidates per job; the per-company 3-5 fan-out can
+  // exceed that with many companies, so clamp. Deterministic (out is seeded order).
+  return out.slice(0, 50);
 }
 
 export function createMockDiscoverProvider(): DiscoverProvider {
