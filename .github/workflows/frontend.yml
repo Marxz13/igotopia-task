@@ -1,0 +1,57 @@
+name: frontend
+
+# Frontend lane: fast checks, no database. Runs only when frontend files change.
+# The api routes (src/app/api) are excluded here - see backend.yml.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/app/**'
+      - '!src/app/api/**'
+      - 'mocks/**'
+      - 'public/**'
+      - 'tests/ui/**'
+      - 'src/core/contract/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'eslint.config.mjs'
+      - 'vitest.config.ts'
+      - '.nvmrc'
+      - '.github/workflows/frontend.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/app/**'
+      - '!src/app/api/**'
+      - 'mocks/**'
+      - 'public/**'
+      - 'tests/ui/**'
+      - 'src/core/contract/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'eslint.config.mjs'
+      - 'vitest.config.ts'
+      - '.nvmrc'
+      - '.github/workflows/frontend.yml'
+
+concurrency:
+  group: frontend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: typecheck · lint · build · ui-tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build
+      - run: npm run test:ui

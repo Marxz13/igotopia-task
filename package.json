@@ -19,6 +19,8 @@
     "typecheck": "tsc --noEmit",
     "format": "prettier --write .",
     "test": "vitest run --passWithNoTests",
+    "test:ui": "vitest run tests/ui",
+    "test:be": "vitest run tests/state-machine.test.ts tests/providers.test.ts tests/api-search.test.ts tests/worker-pipeline.test.ts",
     "prepare": "husky"
   },
   "lint-staged": {

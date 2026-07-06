@@ -1,0 +1,87 @@
+name: backend
+
+# Backend lane: integration tests against a real Postgres + Redis. Runs only when
+# backend files change (src/core, api routes, scripts, migrations, contract).
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/core/**'
+      - 'src/app/api/**'
+      - 'scripts/**'
+      - 'drizzle.config.ts'
+      - 'docker-compose.yml'
+      - 'tests/*.test.ts'
+      - 'tests/helpers/**'
+      - 'tests/setup.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'eslint.config.mjs'
+      - 'vitest.config.ts'
+      - '.nvmrc'
+      - '.github/workflows/backend.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/core/**'
+      - 'src/app/api/**'
+      - 'scripts/**'
+      - 'drizzle.config.ts'
+      - 'docker-compose.yml'
+      - 'tests/*.test.ts'
+      - 'tests/helpers/**'
+      - 'tests/setup.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - 'eslint.config.mjs'
+      - 'vitest.config.ts'
+      - '.nvmrc'
+      - '.github/workflows/backend.yml'
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: typecheck · lint · migrate · integration
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: lead_discovery
+        ports:
+          - '5432:5432'
+        options: >-
+          --health-cmd "pg_isready -U postgres -d lead_discovery"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - '6379:6379'
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/lead_discovery
+      REDIS_URL: redis://localhost:6379
+      SESSION_SECRET: ci-only-session-secret-not-a-real-key
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run migrate
+      - run: npm run test:be
