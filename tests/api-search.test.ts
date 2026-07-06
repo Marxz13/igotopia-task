@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { startSearch } from '@/core/services/search-service';
+import { enforceSearchRateLimit, searchRateLimitKey } from '@/core/services/rate-limiter';
+import { getRedis } from '@/core/queue/connection';
 import { buildMe } from '@/core/services/auth-service';
 import { getJobById } from '@/core/repositories/job-repository';
 import { listLeadsByOrg } from '@/core/repositories/lead-repository';
@@ -126,5 +128,51 @@ describe('stale membership — never advertise a revoked active org', () => {
   it('buildMe keeps an activeOrgId the user still belongs to', async () => {
     const me = await buildMe(ALLAN, ALLANINC); // ALLAN is a member of Allan Inc
     expect(me.activeOrgId).toBe(ALLANINC);
+  });
+});
+
+describe('rate limit — start search per org', () => {
+  // Node coerces `process.env.X = undefined` to the string "undefined", so restore by
+  // deleting when the var was originally unset.
+  function setEnv(key: string, value: string | undefined): void {
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  async function withRateEnv(max: string, windowMs: string, fn: () => Promise<void>) {
+    const prevMax = process.env.RATE_LIMIT_MAX;
+    const prevWin = process.env.RATE_LIMIT_WINDOW_MS;
+    setEnv('RATE_LIMIT_MAX', max);
+    setEnv('RATE_LIMIT_WINDOW_MS', windowMs);
+    try {
+      await fn();
+    } finally {
+      setEnv('RATE_LIMIT_MAX', prevMax);
+      setEnv('RATE_LIMIT_WINDOW_MS', prevWin);
+    }
+  }
+
+  beforeEach(async () => {
+    await getRedis().del(searchRateLimitKey(MARZLABS), searchRateLimitKey(ALLANINC));
+  });
+
+  it('allows up to the cap, then 429s; a different org has its own bucket', async () => {
+    await withRateEnv('3', '60000', async () => {
+      // long window so it can't expire mid-test
+      await enforceSearchRateLimit(MARZLABS);
+      await enforceSearchRateLimit(MARZLABS);
+      await enforceSearchRateLimit(MARZLABS); // 3 allowed
+      await expect(enforceSearchRateLimit(MARZLABS)).rejects.toMatchObject({
+        code: 'rate_limited',
+        status: 429,
+      });
+      // A separate org is unaffected by MARZLABS hitting its cap.
+      await expect(enforceSearchRateLimit(ALLANINC)).resolves.toBeUndefined();
+    });
+  });
+
+  it('RATE_LIMIT_MAX=0 disables the limit', async () => {
+    await withRateEnv('0', '10000', async () => {
+      for (let i = 0; i < 8; i++) await enforceSearchRateLimit(MARZLABS);
+    });
   });
 });

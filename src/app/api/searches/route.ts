@@ -5,6 +5,7 @@ import {
   type CreateSearchResponse,
 } from '@/core/contract';
 import { ValidationError } from '@/core/errors';
+import { enforceSearchRateLimit } from '@/core/services/rate-limiter';
 import { startSearch } from '@/core/services/search-service';
 import { errorResponse, requireContext } from '@/app/api/_lib/http';
 
@@ -15,6 +16,8 @@ export async function POST(req: Request): Promise<NextResponse> {
   try {
     const ctx = await requireContext();
     orgId = ctx.orgId;
+    // Per-org rate limit, before any charge: a blocked burst gets 429, never spends credits.
+    await enforceSearchRateLimit(ctx.orgId);
     const key = req.headers.get(IDEMPOTENCY_KEY_HEADER);
     if (!key) throw new ValidationError('Idempotency-Key header is required');
 

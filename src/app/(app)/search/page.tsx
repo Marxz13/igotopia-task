@@ -28,11 +28,25 @@ export default function SearchPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<FormError>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  // Rate-limit cooldown: set on a 429, counted down and cleared when it elapses.
+  const [rateLimit, setRateLimit] = useState<{ message: string; until: number } | null>(null);
+  const [rlNow, setRlNow] = useState(0);
 
   const alertRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (formError?.kind === 'alert') alertRef.current?.focus();
   }, [formError]);
+
+  useEffect(() => {
+    if (!rateLimit) return;
+    setRlNow(Date.now());
+    const t = setInterval(() => setRlNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, [rateLimit]);
+  const rlSecondsLeft = rateLimit ? Math.max(0, Math.ceil((rateLimit.until - rlNow) / 1000)) : 0;
+  useEffect(() => {
+    if (rateLimit && rlNow && rlSecondsLeft <= 0) setRateLimit(null);
+  }, [rateLimit, rlNow, rlSecondsLeft]);
 
   const noCredits = credits < 1;
   const submitDisabled = submitting || noCredits;
@@ -56,6 +70,7 @@ export default function SearchPage() {
       const res = await createSearch(request, idemKey);
       rotateIdemKey(activeOrgId); // server acknowledged - safe to start a fresh key
       setJobId(res.jobId); // search succeeded - commit it before the best-effort refresh
+      setRateLimit(null); // a success clears any lingering cooldown banner
       try {
         await refreshMe(); // reflect the charge in the credits pill
       } catch {
@@ -68,6 +83,8 @@ export default function SearchPage() {
           kind: 'alert',
           text: `Insufficient credits for ${activeOrg?.name ?? 'this workspace'}. Switch workspace to continue.`,
         });
+      } else if (err instanceof ApiError && err.status === 429) {
+        setRateLimit({ message: err.message, until: Date.now() + (err.retryAfterMs ?? 10_000) });
       } else {
         setFormError({
           kind: 'alert',
@@ -208,6 +225,28 @@ export default function SearchPage() {
           >
             <span aria-hidden="true">✕</span>
             <span>{formError.text}</span>
+          </div>
+        )}
+        {rateLimit && rlSecondsLeft > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            style={{
+              marginTop: 14,
+              display: 'flex',
+              gap: 8,
+              padding: '10px 12px',
+              border: '1px solid #fedf89',
+              background: '#fffaeb',
+              borderRadius: 10,
+              fontSize: 13,
+              color: '#b54708',
+            }}
+          >
+            <span aria-hidden="true">⏳</span>
+            <span>
+              {rateLimit.message} Try again in {rlSecondsLeft}s.
+            </span>
           </div>
         )}
       </div>

@@ -24,6 +24,10 @@ x-app-env: &app-env
   # Per-stage pause so job progress and cancel are watchable on the live demo.
   # Without this the mock stages finish in ms and a cancel can't land before completion.
   STAGE_DELAY_MS: '3000'
+  # Basic per-org rate limit on start-search (3 starts per 10s) so the limit is
+  # demoable on the live site: click Start search 4x quickly to trip the 4th.
+  RATE_LIMIT_MAX: '3'
+  RATE_LIMIT_WINDOW_MS: '10000'
 
 services:
   postgres:

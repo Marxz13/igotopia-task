@@ -42,3 +42,13 @@ export class NotFoundError extends AppError {
     super(message, 404, 'not_found');
   }
 }
+
+// Too many start-search requests for one org inside the window. Carries the ms left
+// so the route can send a Retry-After and the UI can count down the cooldown.
+export class RateLimitError extends AppError {
+  readonly retryAfterMs: number;
+  constructor(message = 'Too many requests', retryAfterMs = 0) {
+    super(message, 429, 'rate_limited');
+    this.retryAfterMs = retryAfterMs;
+  }
+}

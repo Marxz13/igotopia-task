@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import type { ErrorResponse } from '@/core/contract';
-import { AppError, UnauthorizedError } from '@/core/errors';
+import { AppError, RateLimitError, UnauthorizedError } from '@/core/errors';
 import { getLogger } from '@/core/logger';
 import { isMember } from '@/core/repositories/membership-repository';
 import {
@@ -27,6 +27,19 @@ export function errorResponse(
       { code: err.code, status: err.status, path: pathname(meta?.req), orgId: meta?.orgId },
       'request_denied',
     );
+    // Rate-limit responses carry the cooldown: Retry-After header (seconds, standard)
+    // plus retryAfterMs in the body so the UI can render a live countdown.
+    if (err instanceof RateLimitError) {
+      const body: ErrorResponse = {
+        error: err.code,
+        message: err.message,
+        retryAfterMs: err.retryAfterMs,
+      };
+      return NextResponse.json(body, {
+        status: err.status,
+        headers: { 'Retry-After': String(Math.ceil(err.retryAfterMs / 1000)) },
+      });
+    }
     const body: ErrorResponse = { error: err.code, message: err.message };
     return NextResponse.json(body, { status: err.status });
   }

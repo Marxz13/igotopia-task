@@ -14,6 +14,10 @@ const envSchema = z.object({
   // BullMQ key prefix. Tests use a separate prefix so a dev worker running against the
   // same Redis can never pick up test-enqueued jobs and race the assertions.
   QUEUE_PREFIX: z.string().min(1).default('bull'),
+  // Basic per-org rate limit on start-search: at most MAX starts per WINDOW (fixed
+  // window in Redis). Over the cap -> 429 before any credit is charged. MAX=0 disables.
+  RATE_LIMIT_MAX: z.coerce.number().int().nonnegative().default(3),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(10_000),
   // Artificial per-stage pause (ms) so discover/verify are watchable and cancellable
   // in a demo. Defaults to 0 so tests stay fast; the local .env sets 2000.
   STAGE_DELAY_MS: z.coerce.number().int().nonnegative().default(0),

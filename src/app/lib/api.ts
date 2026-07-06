@@ -23,12 +23,19 @@ import {
 export class ApiError extends Error {
   readonly status: number;
   readonly code: ErrorCode | 'network_error';
+  readonly retryAfterMs: number | undefined; // set on 429 so the UI can count down the cooldown
 
-  constructor(status: number, code: ErrorCode | 'network_error', message: string) {
+  constructor(
+    status: number,
+    code: ErrorCode | 'network_error',
+    message: string,
+    retryAfterMs?: number,
+  ) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -68,7 +75,12 @@ async function request(path: string, options: RequestOptions = {}): Promise<unkn
   if (!res.ok) {
     const parsed = errorResponseSchema.safeParse(payload);
     if (parsed.success) {
-      throw new ApiError(res.status, parsed.data.error, parsed.data.message ?? parsed.data.error);
+      throw new ApiError(
+        res.status,
+        parsed.data.error,
+        parsed.data.message ?? parsed.data.error,
+        parsed.data.retryAfterMs,
+      );
     }
     throw new ApiError(res.status, 'internal_error', `Request failed (${res.status}).`);
   }

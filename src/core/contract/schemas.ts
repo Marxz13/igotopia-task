@@ -47,10 +47,12 @@ export const errorCodeSchema = z.enum([
 ]);
 
 // Error envelope
-// Every non-2xx JSON response has this shape.
+// Every non-2xx JSON response has this shape. `retryAfterMs` is set only on 429
+// (rate_limited) so the client can count down the cooldown.
 export const errorResponseSchema = z.object({
   error: errorCodeSchema,
   message: z.string().optional(),
+  retryAfterMs: z.number().optional(),
 });
 
 // Domain entities

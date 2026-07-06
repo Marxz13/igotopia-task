@@ -29,7 +29,7 @@ review. Each organization only ever sees its own jobs and leads.
 | Queue      | Redis + BullMQ (two queues: discover, verify)    |
 | Validation | Zod, one shared contract for API + worker + UI   |
 | Logging    | Pino (structured JSON logs)                      |
-| Tests      | Vitest (62 tests)                                |
+| Tests      | Vitest (64 tests)                                |
 | Dev mock   | MSW for the frontend (off by default)            |
 | Tooling    | ESLint, Prettier, Husky, commitlint, drizzle-kit |
 
@@ -104,6 +104,9 @@ flowchart LR
   progress card. A crash + recovery shows as two discovery passes.
 - **Explainable scoring (extra).** A verified lead gets a 0-100 score built from named factors
   (title seniority, corporate domain, named mailbox, etc.), not a black-box number.
+- **Rate limit (extra).** Start-search is capped per org (default **3 per 10s**, a Redis
+  fixed-window). Over the cap the API returns **429** with a `Retry-After`, and the UI shows a live
+  cooldown. The check runs **before** the credit charge, so a blocked burst never spends credits.
 
 ---
 
@@ -166,7 +169,8 @@ npm run worker   # terminal 2
 
 Then open http://localhost:3000 and sign in with `marz@test.com`. Start a search (e.g. companies
 `Marriott`, role `Director of Sales`, region `Malaysia`) and watch it move through discover →
-verify.
+verify. To see the **per-org rate limit**, click **Start search** four times quickly — the fourth
+returns 429 and the form shows a cooldown (default 3 per 10s).
 
 > The base `docker-compose.yml` only runs Postgres + Redis for local dev. A full-stack image
 > (app + worker + Caddy) also exists in `docker-compose.prod.yml` for deployment.
@@ -189,14 +193,14 @@ verify.
 ## Tests
 
 ```bash
-npm test        # all 62 tests (backend tests need Postgres + Redis running)
+npm test        # all 64 tests (backend tests need Postgres + Redis running)
 npm run test:ui # pure logic + frontend only, no database
 ```
 
 They cover the parts most likely to break: atomic credit charge, double-submit, cross-org
 isolation, the discover/verify state machine, crash-and-restart with no duplicate leads, cancel
-(including cancel mid-stage without clobbering it), the activity-log event sequence, mock
-providers, and the scoring logic.
+(including cancel mid-stage without clobbering it), the activity-log event sequence, the per-org
+rate limit, mock providers, and the scoring logic.
 
 ---
 
@@ -277,6 +281,8 @@ To use a real one:
 | `SESSION_SECRET`        | _(required)_   | Signs the session cookie; min 16 chars, no code default; set a long random value |
 | `PROVIDER_MODE`         | `mock`         | `mock` or `real`                                                                 |
 | `WORKER_CONCURRENCY`    | `5`            | Jobs processed at once per stage                                                 |
+| `RATE_LIMIT_MAX`        | `3`            | Max start-search calls per org per window (`0` disables)                         |
+| `RATE_LIMIT_WINDOW_MS`  | `10000`        | Rate-limit window in ms                                                          |
 | `STAGE_DELAY_MS`        | `0`            | Pause per stage (ms); `.env` sets `2000` so progress and cancel are watchable    |
 | `QUEUE_PREFIX`          | `bull`         | BullMQ key prefix (tests use a separate prefix so a dev worker can't race them)  |
 | `CRASH_AFTER_DISCOVER`  | `0`            | Set to `1` to demo crash recovery                                                |
@@ -311,5 +317,5 @@ get blocked less.
 
 **Also:** transactional outbox to replace the sweeper; rate limiter + circuit breaker around the real
 provider; partition the leads table once large; real metrics (queue lag, cost per job, cache hit
-rate) with alerting; credit prices matching real cost + per-org rate limit; proper auth (passwords or
-SSO + CSRF).
+rate) with alerting; credit prices matching real cost and tuning the per-org rate limit to match;
+proper auth (passwords or SSO + CSRF).
