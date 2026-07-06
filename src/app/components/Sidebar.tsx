@@ -204,6 +204,57 @@ export function Sidebar() {
 
       <div style={{ flex: 1 }} />
 
+      {/* Credits */}
+      <div aria-label={`${credits} credits remaining`} style={{ marginBottom: 4 }}>
+        <div
+          style={{
+            border: '1px solid #f1ede9',
+            borderRadius: 14,
+            padding: '12px 14px',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+            <span style={{ color: 'var(--brand)', display: 'flex' }}>
+              <SparkIcon size={16} />
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)' }}>Credits</span>
+          </div>
+          <div
+            className="tnum"
+            style={{
+              fontSize: 26,
+              fontWeight: 700,
+              letterSpacing: '-.02em',
+              color: zero ? 'var(--danger)' : 'var(--ink)',
+              marginTop: 2,
+            }}
+          >
+            {credits}
+          </div>
+          <div
+            style={{
+              height: 6,
+              background: '#f1efec',
+              borderRadius: 3,
+              marginTop: 8,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.max(0, Math.min(100, (credits / 10) * 100))}%`,
+                height: '100%',
+                background: zero ? 'var(--danger)' : 'var(--brand)',
+                borderRadius: 3,
+              }}
+            />
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--muted-2)', marginTop: 8 }}>
+            {zero ? 'Out of credits - switch workspace' : '1 credit per search'}
+          </div>
+        </div>
+      </div>
+
       {/* User footer */}
       <div
         style={{
@@ -276,63 +327,6 @@ export function Sidebar() {
         >
           <LogoutIcon />
         </button>
-      </div>
-
-      {/* Credits - tucked under the user section; clipped so only the head and
-          upper half of the card peeks up from the bottom edge. */}
-      <div
-        aria-label={`${credits} credits remaining`}
-        style={{ marginTop: 12, height: 62, overflow: 'hidden' }}
-      >
-        <div
-          style={{
-            border: '1px solid #f1ede9',
-            borderBottom: 0,
-            borderRadius: '14px 14px 0 0',
-            padding: '12px 14px 16px',
-            background: 'linear-gradient(#fff,#fffbf7)',
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-            <span style={{ color: 'var(--brand)', display: 'flex' }}>
-              <SparkIcon size={16} />
-            </span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--ink-2)' }}>Credits</span>
-          </div>
-          <div
-            className="tnum"
-            style={{
-              fontSize: 26,
-              fontWeight: 700,
-              letterSpacing: '-.02em',
-              color: zero ? 'var(--danger)' : 'var(--ink)',
-              marginTop: 2,
-            }}
-          >
-            {credits}
-          </div>
-          <div
-            style={{
-              height: 6,
-              background: '#f1efec',
-              borderRadius: 3,
-              marginTop: 8,
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                width: `${Math.max(0, Math.min(100, (credits / 10) * 100))}%`,
-                height: '100%',
-                background: zero ? 'var(--danger)' : 'var(--brand)',
-                borderRadius: 3,
-              }}
-            />
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--muted-2)', marginTop: 8 }}>
-            {zero ? 'Out of credits - switch workspace' : '1 credit per search'}
-          </div>
-        </div>
       </div>
     </aside>
   );
