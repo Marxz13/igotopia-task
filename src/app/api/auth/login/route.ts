@@ -15,6 +15,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     getLogger().info({ userId: me.user.id }, 'login');
     return res;
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, { req });
   }
 }

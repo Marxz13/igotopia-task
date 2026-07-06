@@ -7,16 +7,18 @@ import { toJob } from '@/app/api/_lib/serializers';
 // GET /api/jobs/:id - org-scoped poll endpoint. A cross-org or unknown id returns
 // 404, never 403, so "not yours" can't be told apart from "doesn't exist".
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<NextResponse> {
+  let orgId: string | undefined = undefined;
   try {
     const ctx = await requireContext();
+    orgId = ctx.orgId;
     const { id } = await params;
     const row = await getJobById(ctx.orgId, id);
     if (!row) throw new NotFoundError('Job not found');
     return NextResponse.json(toJob(row));
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, { req, orgId });
   }
 }

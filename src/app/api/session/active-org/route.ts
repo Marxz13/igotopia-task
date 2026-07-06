@@ -10,6 +10,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     const { organizationId } = switchOrgRequestSchema.parse(body);
     return NextResponse.json(await switchOrg(session, organizationId));
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, { req });
   }
 }

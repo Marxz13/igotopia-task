@@ -11,8 +11,10 @@ import { errorResponse, requireContext } from '@/app/api/_lib/http';
 // POST /api/searches - charge, create idempotently, and enqueue. No provider
 // work in the request path (that would be fake-async); the worker does discovery.
 export async function POST(req: Request): Promise<NextResponse> {
+  let orgId: string | undefined = undefined;
   try {
     const ctx = await requireContext();
+    orgId = ctx.orgId;
     const key = req.headers.get(IDEMPOTENCY_KEY_HEADER);
     if (!key) throw new ValidationError('Idempotency-Key header is required');
 
@@ -30,6 +32,6 @@ export async function POST(req: Request): Promise<NextResponse> {
     // 201 for a freshly created job, 200 for an idempotent replay of the same job.
     return NextResponse.json(payload, { status: result.replayed ? 200 : 201 });
   } catch (err) {
-    return errorResponse(err);
+    return errorResponse(err, { req, orgId });
   }
 }

@@ -14,8 +14,18 @@ import {
 // Shared API-route helpers. `_lib` is a private folder that Next never routes.
 
 /** Map any thrown value to the contract's { error, message } envelope and status. */
-export function errorResponse(err: unknown): NextResponse {
+export function errorResponse(
+  err: unknown,
+  meta?: { req?: Request; orgId?: string | undefined },
+): NextResponse {
   if (err instanceof AppError) {
+    // Audit line for denied / cross-org access (401, 402, 404 mask, 400). The 404
+    // mask hides a cross-org probe from the client, so this is the only place that
+    // boundary hit gets recorded - keyed by the caller's org so denials are auditable.
+    getLogger().warn(
+      { code: err.code, status: err.status, path: pathname(meta?.req), orgId: meta?.orgId },
+      'request_denied',
+    );
     const body: ErrorResponse = { error: err.code, message: err.message };
     return NextResponse.json(body, { status: err.status });
   }
@@ -29,6 +39,16 @@ export function errorResponse(err: unknown): NextResponse {
   getLogger().error({ err }, 'unhandled_error');
   const body: ErrorResponse = { error: 'internal_error', message: 'Internal error' };
   return NextResponse.json(body, { status: 500 });
+}
+
+/** Safe pathname for denial logs — never let a malformed URL break error handling. */
+function pathname(req?: Request): string | undefined {
+  if (!req) return undefined;
+  try {
+    return new URL(req.url).pathname;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function readSessionToken(): Promise<string | undefined> {
