@@ -22,10 +22,8 @@ const envSchema = z.object({
 
 export type AppConfig = z.infer<typeof envSchema>;
 
-let cached: AppConfig | null = null;
-
-/** Parse and validate env once, at process boot. Throws (fail-fast) on missing or invalid values. */
+/** Parse and validate env. Throws (fail-fast) on missing or invalid values. Not
+ * cached, so a runtime toggle (e.g. CRASH_AFTER_DISCOVER) is picked up on the next read. */
 export function loadConfig(): AppConfig {
-  if (!cached) cached = envSchema.parse(process.env);
-  return cached;
+  return envSchema.parse(process.env);
 }

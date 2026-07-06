@@ -13,12 +13,12 @@ export async function runSweep(): Promise<number> {
 
   for (const job of jobs) {
     if (job.status === 'queued' || job.status === 'discovering') {
-      if (!(await getDiscoverQueue().getJob(`discover:${job.id}`))) {
+      if (!(await getDiscoverQueue().getJob(`discover-${job.id}`))) {
         await enqueueDiscover(job.id);
         reenqueued++;
       }
     } else if (job.status === 'verifying') {
-      if (!(await getVerifyQueue().getJob(`verify:${job.id}`))) {
+      if (!(await getVerifyQueue().getJob(`verify-${job.id}`))) {
         await enqueueVerify(job.id);
         reenqueued++;
       }
