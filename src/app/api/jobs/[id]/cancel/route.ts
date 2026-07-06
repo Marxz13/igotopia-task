@@ -21,7 +21,7 @@ export async function POST(
 
     const cancelled = await cancelJob(ctx.orgId, id);
     if (cancelled) {
-      await appendJobEvent(ctx.orgId, id, 'cancelled', 'Cancelled by user');
+      await appendJobEvent(ctx.orgId, id, 'cancelled', 'Cancelled by user — 1 credit refunded');
       getLogger().info({ jobId: id, orgId: ctx.orgId }, 'job cancelled');
       return NextResponse.json(toJob(cancelled));
     }

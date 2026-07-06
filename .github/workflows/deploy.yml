@@ -44,13 +44,34 @@ jobs:
           docker save igotopia:vm | gzip -c \
             | ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" 'gunzip -c | docker load'
 
+      # Ship the version-controlled runtime-env overlay next to the VM's compose. The VM
+      # keeps its own docker-compose.yml (Caddy, SESSION_SECRET, volumes); this overlay is
+      # the source of truth for the tuning env (STAGE_DELAY_MS, rate limit) so it can't
+      # drift out of the running stack the way it did when it lived only in the repo compose.
+      - name: Ship env overlay to VM
+        run: |
+          scp -i ~/.ssh/deploy_key deploy/compose.env.yml \
+            "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}:/root/igotopia/compose.env.yml"
+
       - name: Recreate stack (init runs migrate + seed, then app/worker)
         run: |
           ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
-            'cd /root/igotopia && set -a && . ./.env && set +a && docker compose up -d && docker image prune -f'
+            'cd /root/igotopia && set -a && . ./.env && set +a && docker compose -f docker-compose.yml -f compose.env.yml up -d && docker image prune -f'
 
       - name: Verify health
         run: |
           ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
             'sleep 8 && docker exec igotopia-app-1 wget -qO- http://localhost:3000/api/health' | tee health.txt
           grep -q '"status":"ok"' health.txt
+
+      # Guardrail: the stage delay drifting back to 0 broke cancel + the watchable delay
+      # once already. Fail the deploy loudly if the worker comes up without it.
+      - name: Assert stage delay reached the worker
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'docker exec igotopia-worker-1 printenv STAGE_DELAY_MS || true' | tee delay.txt
+          v=$(tr -dc '0-9' < delay.txt)
+          if [ -z "$v" ] || [ "$v" -le 0 ]; then
+            echo "::error::STAGE_DELAY_MS is unset/0 on the worker — stage delay + cancel would be broken"
+            exit 1
+          fi

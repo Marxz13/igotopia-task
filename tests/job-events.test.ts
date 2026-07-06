@@ -4,7 +4,16 @@ import { runDiscoverStage } from '@/core/worker/stages/discover';
 import { runVerifyStage } from '@/core/worker/stages/verify';
 import { advanceJobStatus, cancelJob, getJobById } from '@/core/repositories/job-repository';
 import { listJobEventsByOrg } from '@/core/repositories/job-event-repository';
-import { ALLANINC, MARZ, MARZLABS, leadCount, requireJob, resetDb } from './helpers/db';
+import {
+  ALLANINC,
+  MARZ,
+  MARZLABS,
+  credits,
+  leadCount,
+  ledgerCount,
+  requireJob,
+  resetDb,
+} from './helpers/db';
 
 const req = { companies: ['Marriott'], roles: ['Director of Sales'], region: 'Malaysia' };
 
@@ -112,5 +121,37 @@ describe('cancel', () => {
     await runVerifyStage(jobId);
     expect(await cancelJob(MARZLABS, jobId)).toBeNull();
     expect((await requireJob(jobId)).status).toBe('completed');
+  });
+
+  it('cancel refunds the one credit the search charged', async () => {
+    const jobId = await start('r1');
+    expect(await credits(MARZLABS)).toBe(9); // charged at start
+    expect((await cancelJob(MARZLABS, jobId))?.status).toBe('cancelled');
+    expect(await credits(MARZLABS)).toBe(10); // given back
+    expect(await ledgerCount(MARZLABS)).toBe(2); // search_charge + refund
+  });
+
+  it('cancel is idempotent — a repeat cancel does not double-refund', async () => {
+    const jobId = await start('r2');
+    await cancelJob(MARZLABS, jobId);
+    expect(await cancelJob(MARZLABS, jobId)).toBeNull(); // already cancelled
+    expect(await credits(MARZLABS)).toBe(10); // still exactly one refund
+    expect(await ledgerCount(MARZLABS)).toBe(2);
+  });
+
+  it('a completed job that is "cancelled" is a no-op and refunds nothing', async () => {
+    const jobId = await start('r3');
+    await runDiscoverStage(jobId);
+    await runVerifyStage(jobId);
+    expect(await credits(MARZLABS)).toBe(9); // charged, work delivered
+    expect(await cancelJob(MARZLABS, jobId)).toBeNull();
+    expect(await credits(MARZLABS)).toBe(9); // no refund
+  });
+
+  it('a cross-org cancel that fails refunds nobody', async () => {
+    const jobId = await start('r4');
+    expect(await cancelJob(ALLANINC, jobId)).toBeNull(); // wrong org, no flip
+    expect(await credits(MARZLABS)).toBe(9); // charger untouched
+    expect(await credits(ALLANINC)).toBe(1); // canceller untouched
   });
 });

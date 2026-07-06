@@ -1,7 +1,7 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { JobStatus } from '@/core/contract';
 import { getDb } from '@/core/db/client';
-import { jobs, type JobRow } from '@/core/db/schema';
+import { creditLedger, jobs, organizations, type JobRow } from '@/core/db/schema';
 
 // Org-scoped reads (the API tenancy layer)
 // Every method takes orgId first; no unscoped read is exposed to the API, so
@@ -81,21 +81,50 @@ export async function advanceJobStatus(
   return rows.length > 0;
 }
 
-/** Org-scoped cancel: flips a still-running job to cancelled. Returns the updated row,
- * or null when the job doesn't exist for this org or is already terminal. */
+/** Org-scoped cancel: flips a still-running job to cancelled AND refunds the one credit
+ * the search charged, in a single transaction, so a job is never left cancelled-but-
+ * unrefunded. Returns the updated row, or null when the job doesn't exist for this org or
+ * is already terminal (no flip, no refund). The flip's WHERE status IN (non-terminal) can
+ * match at most once, so the refund runs exactly once; the ledger's UNIQUE(job_id, reason)
+ * is a second guard against a double refund. */
 export async function cancelJob(orgId: string, jobId: string): Promise<JobRow | null> {
-  const rows = await getDb()
-    .update(jobs)
-    .set({ status: 'cancelled', completedAt: new Date(), updatedAt: new Date() })
-    .where(
-      and(
-        eq(jobs.id, jobId),
-        eq(jobs.organizationId, orgId),
-        inArray(jobs.status, ['queued', 'discovering', 'verifying']),
-      ),
-    )
-    .returning();
-  return rows[0] ?? null;
+  return getDb().transaction(async (tx) => {
+    const rows = await tx
+      .update(jobs)
+      .set({ status: 'cancelled', completedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(jobs.id, jobId),
+          eq(jobs.organizationId, orgId),
+          inArray(jobs.status, ['queued', 'discovering', 'verifying']),
+        ),
+      )
+      .returning();
+
+    const cancelled = rows[0];
+    if (!cancelled) return null; // not ours, or already terminal — nothing to refund
+
+    // Give the credit back. balance_after is read from the increment so the ledger stays
+    // a truthful running balance, mirroring the search_charge row written at start.
+    const credited = await tx
+      .update(organizations)
+      .set({ credits: sql`${organizations.credits} + 1` })
+      .where(eq(organizations.id, orgId))
+      .returning({ credits: organizations.credits });
+
+    await tx
+      .insert(creditLedger)
+      .values({
+        organizationId: orgId,
+        jobId,
+        delta: 1,
+        reason: 'refund',
+        balanceAfter: credited[0]?.credits ?? 0,
+      })
+      .onConflictDoNothing({ target: [creditLedger.jobId, creditLedger.reason] });
+
+    return cancelled;
+  });
 }
 
 /** System-scoped status read, used by the worker's cooperative cancellation checks. */

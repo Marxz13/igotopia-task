@@ -27,7 +27,9 @@ export default function SearchPage() {
   const [region, setRegion] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<FormError>(null);
-  const [jobId, setJobId] = useState<string | null>(null);
+  // Every started search stacks its own live card, newest on top, so firing several in a
+  // row keeps them all visible instead of replacing the previous one.
+  const [jobIds, setJobIds] = useState<string[]>([]);
   // Rate-limit cooldown: set on a 429, counted down and cleared when it elapses.
   const [rateLimit, setRateLimit] = useState<{ message: string; until: number } | null>(null);
   const [rlNow, setRlNow] = useState(0);
@@ -69,7 +71,8 @@ export default function SearchPage() {
     try {
       const res = await createSearch(request, idemKey);
       rotateIdemKey(activeOrgId); // server acknowledged - safe to start a fresh key
-      setJobId(res.jobId); // search succeeded - commit it before the best-effort refresh
+      // Stack the new card on top; guard against a replayed jobId so keys stay unique.
+      setJobIds((prev) => (prev.includes(res.jobId) ? prev : [res.jobId, ...prev]));
       setRateLimit(null); // a success clears any lingering cooldown banner
       try {
         await refreshMe(); // reflect the charge in the credits pill
@@ -96,8 +99,9 @@ export default function SearchPage() {
     }
   }
 
-  function reset() {
-    setJobId(null);
+  // Drop a single card from the stack (used by a failed job's "Try again").
+  function removeJob(id: string) {
+    setJobIds((prev) => prev.filter((j) => j !== id));
     setFormError(null);
   }
 
@@ -251,14 +255,15 @@ export default function SearchPage() {
         )}
       </div>
 
-      {jobId && (
+      {jobIds.map((id) => (
         <JobProgress
-          jobId={jobId}
+          key={id}
+          jobId={id}
           onSettled={() => void refreshMe()}
-          onReset={reset}
-          onViewInbox={(id) => router.push(`/inbox?job=${id}`)}
+          onReset={() => removeJob(id)}
+          onViewInbox={(jid) => router.push(`/inbox?job=${jid}`)}
         />
-      )}
+      ))}
     </section>
   );
 }

@@ -90,7 +90,7 @@ export function JobProgress({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Current job</h2>
+          <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Job</h2>
           <span className="mono" style={{ fontSize: 13, color: 'var(--muted-2)' }}>
             #{jobId.slice(0, 6)}
           </span>
