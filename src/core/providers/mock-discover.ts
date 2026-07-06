@@ -48,12 +48,16 @@ async function mockDiscover(input: SearchRequest, jobId: string): Promise<Candid
   const roles = input.roles.length > 0 ? input.roles : ['Sales Lead'];
   const out: CandidateLead[] = [];
 
-  for (const company of companies) {
+  for (let ci = 0; ci < companies.length; ci++) {
+    const company = companies[ci];
+    if (!company) continue;
     const domain = `${slug(company)}.com`;
-    const count = 3 + Math.floor(seeded(`${jobId}:${company}:count`)() * 3); // 3-5
+    // Seed on the company's position too, so two inputs that slug alike (or a repeated
+    // company) still get their own varied, non-colliding contacts.
+    const count = 3 + Math.floor(seeded(`${jobId}:${ci}:${company}:count`)() * 3); // 3-5
 
     for (let i = 0; i < count; i++) {
-      const r = seeded(`${jobId}:${company}:${i}`);
+      const r = seeded(`${jobId}:${ci}:${company}:${i}`);
       const first = pick(FIRST_NAMES, r());
       const last = pick(LAST_NAMES, r());
       const role = roles[i % roles.length] ?? 'Sales Lead';
@@ -64,8 +68,10 @@ async function mockDiscover(input: SearchRequest, jobId: string): Promise<Candid
         : `${first.toLowerCase()}.${last.toLowerCase()}@${domain}`;
 
       out.push({
-        // Stable + unique within the job -> idempotent insert on re-discovery.
-        candidateKey: `${slug(company)}:${i}`,
+        // Stable across re-runs (seeded by jobId) AND globally unique — the company
+        // index prefix stops two same-slug companies from sharing a key and silently
+        // dropping rows on the UNIQUE(job_id, candidate_key) insert.
+        candidateKey: `${ci}:${slug(company)}:${i}`,
         name: `${first} ${last}`,
         company,
         title: role,

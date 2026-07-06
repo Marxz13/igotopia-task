@@ -58,6 +58,18 @@ describe('mock providers', () => {
     expect(verified).toBeGreaterThanOrEqual(1);
   });
 
+  it('two companies with the same slug keep distinct keys (no dropped leads)', async () => {
+    // "Acme Inc" and "Acme, Inc." both slug to "acmeinc"; keys must stay globally
+    // unique so neither company's leads are lost to a candidate_key collision.
+    const out = await discover.discover(
+      { ...req, companies: ['Acme Inc', 'Acme, Inc.'] },
+      'job-slug',
+    );
+    expect(new Set(out.map((c) => c.candidateKey)).size).toBe(out.length);
+    expect(out.some((c) => c.company === 'Acme Inc')).toBe(true);
+    expect(out.some((c) => c.company === 'Acme, Inc.')).toBe(true);
+  });
+
   it('honors sentinels: __empty__ -> 0 candidates, __fail__ throws', async () => {
     const empty = await discover.discover({ ...req, companies: [EMPTY_COMPANY] }, 'j');
     expect(empty.length).toBe(0);
