@@ -5,13 +5,11 @@
 # On a VM: set SITE_ADDRESS=your.domain for auto HTTPS via Caddy.
 name: lead-discovery-prod
 
-# Shared build/image for the three app roles (app / worker / init).
+# Shared image for the three app roles (app / worker / init). Only `init` carries the
+# build: (below) so `docker compose up` builds this image ONCE; app + worker reuse it.
+# If all three built the same tag in parallel they race on export ("image already
+# exists"). On VM/CI set APP_IMAGE=ghcr.io/owner/repo:tag to run a prebuilt image.
 x-app-image: &app-image
-  build:
-    context: .
-    dockerfile: Dockerfile
-  # Local builds lead-discovery:local. On VM/CI set APP_IMAGE=ghcr.io/owner/repo:tag,
-  # then `docker compose pull` + `up --no-build` to run the prebuilt image.
   image: ${APP_IMAGE:-lead-discovery:local}
 
 x-app-env: &app-env
@@ -59,6 +57,11 @@ services:
   # (backward-compatible) migration run before the app cutover.
   init:
     <<: *app-image
+    # The single builder of the shared image. init runs first (app/worker depend on it),
+    # so the image exists locally by the time they start.
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment: *app-env
     command: sh -c 'npm run migrate && npm run seed'
     depends_on:
