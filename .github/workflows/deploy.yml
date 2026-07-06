@@ -1,75 +1,56 @@
 name: deploy
 
-# Build an image and roll it out to the single always-on VM. Runs only on a
-# version tag or manual dispatch - never on a normal push - so unconfigured
-# repos don't get red runs.
+# Continuous deploy to the EC2 box. On push to main (or manual run), build the image
+# on the runner, ship it to the VM over SSH (docker save | load - no registry needed),
+# then recreate the stack. The one-shot init re-runs migrate + seed (both idempotent)
+# and Caddy health-gates the app during the swap, so a broken build never takes traffic.
 #
 # Required repo secrets (Settings -> Secrets -> Actions):
-#   SSH_HOST   VM hostname/IP
-#   SSH_USER   deploy user on the VM
-#   SSH_KEY    private key authorized on the VM
-#   GHCR_TOKEN PAT with read:packages (only if the image is private)
-# VM prep (once): docker + compose installed; this repo's docker-compose.prod.yml +
-#   deploy/Caddyfile at ~/lead-discovery; a ~/lead-discovery/.env with SESSION_SECRET
-#   and SITE_ADDRESS=your.domain (for auto-TLS).
+#   DEPLOY_HOST     VM IP / hostname
+#   DEPLOY_USER     ssh user on the VM (root)
+#   DEPLOY_SSH_KEY  private key authorized on the VM (dedicated deploy key)
+# VM already has: /root/igotopia/{docker-compose.yml,Caddyfile,.env} using image tag
+#   igotopia:vm; .env holds SESSION_SECRET + SITE_ADDRESS.
 on:
   push:
-    tags: ['v*.*.*']
+    branches: [main]
+    paths-ignore: ['**.md']
   workflow_dispatch:
 
-env:
-  IMAGE: ghcr.io/${{ github.repository }}
+# One deploy at a time; don't cancel a run mid-rollout.
+concurrency:
+  group: deploy-ec2
+  cancel-in-progress: false
 
 jobs:
-  build:
-    name: build + push image
+  deploy:
+    name: build + ship + recreate
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    outputs:
-      tag: ${{ steps.meta.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - id: meta
-        run: echo "tag=${GITHUB_SHA::12}" >> "$GITHUB_OUTPUT"
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ env.IMAGE }}:${{ steps.meta.outputs.tag }}
-            ${{ env.IMAGE }}:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
 
-  deploy:
-    name: roll out to VM
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: SSH deploy (expand migration, worker recreate, health-gated app)
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_KEY }}
-          script: |
-            set -euo pipefail
-            cd ~/lead-discovery
-            export APP_IMAGE=${{ env.IMAGE }}:${{ needs.build.outputs.tag }}
-            echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin || true
-            docker compose -f docker-compose.prod.yml pull app worker init
-            # expand (backward-compatible) migrations before swapping the app
-            docker compose -f docker-compose.prod.yml run --rm init
-            # recreate worker, then the app; Caddy's health check routes only
-            # once /api/health is 200. (Full blue-green flip is the multi-node
-            # step described in the README.)
-            docker compose -f docker-compose.prod.yml up -d --no-build --no-deps worker app
-            docker image prune -f
+      - name: Build image (linux/amd64, no attestation)
+        run: docker build --platform linux/amd64 --provenance=false --sbom=false -t igotopia:vm .
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship image to VM (save | gzip | load)
+        run: |
+          docker save igotopia:vm | gzip -c \
+            | ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" 'gunzip -c | docker load'
+
+      - name: Recreate stack (init runs migrate + seed, then app/worker)
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'cd /root/igotopia && set -a && . ./.env && set +a && docker compose up -d && docker image prune -f'
+
+      - name: Verify health
+        run: |
+          ssh -i ~/.ssh/deploy_key "${{ secrets.DEPLOY_USER }}@${{ secrets.DEPLOY_HOST }}" \
+            'sleep 8 && docker exec igotopia-app-1 wget -qO- http://localhost:3000/api/health' | tee health.txt
+          grep -q '"status":"ok"' health.txt
