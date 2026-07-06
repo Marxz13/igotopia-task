@@ -21,6 +21,9 @@ x-app-env: &app-env
   SESSION_SECRET: ${SESSION_SECRET:-local-prod-secret-change-me-min16}
   PROVIDER_MODE: mock
   WORKER_CONCURRENCY: '5'
+  # Per-stage pause so job progress and cancel are watchable on the live demo.
+  # Without this the mock stages finish in ms and a cancel can't land before completion.
+  STAGE_DELAY_MS: '3000'
 
 services:
   postgres:
