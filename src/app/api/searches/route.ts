@@ -29,8 +29,9 @@ export async function POST(req: Request): Promise<NextResponse> {
     });
 
     const payload: CreateSearchResponse = { jobId: result.jobId, status: result.status };
-    // 201 for a freshly created job, 200 for an idempotent replay of the same job.
-    return NextResponse.json(payload, { status: result.replayed ? 200 : 201 });
+    // 202 Accepted: the job is queued and runs in the background (poll GET /api/jobs/:id).
+    // 200 for an idempotent replay of the same job (nothing new was created).
+    return NextResponse.json(payload, { status: result.replayed ? 200 : 202 });
   } catch (err) {
     return errorResponse(err, { req, orgId });
   }

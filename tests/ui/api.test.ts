@@ -58,7 +58,7 @@ describe('api client', () => {
   it('sends the Idempotency-Key header on the credit-spending write', async () => {
     const spy = stubFetch(
       () =>
-        new Response(JSON.stringify({ jobId: ME.orgs[0]!.id, status: 'queued' }), { status: 201 }),
+        new Response(JSON.stringify({ jobId: ME.orgs[0]!.id, status: 'queued' }), { status: 202 }),
     );
     await createSearch({ companies: ['X'], roles: [], region: '' }, 'idem-abc');
     const init = spy.mock.calls[0]![1] as RequestInit;

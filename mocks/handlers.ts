@@ -115,7 +115,7 @@ export const handlers = [
     }
 
     const { jobId } = createSearch(ctx.orgId, ctx.userId, parsed.data, key);
-    return HttpResponse.json({ jobId, status: 'queued' }, { status: 201 });
+    return HttpResponse.json({ jobId, status: 'queued' }, { status: 202 });
   }),
 
   // Jobs
