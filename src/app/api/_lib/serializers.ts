@@ -28,6 +28,7 @@ export function toLead(row: LeadRow): Lead {
     sourceUrl: row.sourceUrl,
     state: row.state as LeadState,
     score: row.score,
+    scoreFactors: row.scoreFactors ?? null,
     rejectionReason: row.rejectionReason,
   };
 }

@@ -4,9 +4,21 @@ import {
   EMPTY_COMPANY,
   FAIL_COMPANY,
 } from '@/core/providers/mock-discover';
-import { createMockVerifyProvider } from '@/core/providers/mock-verify';
+import { createMockVerifyProvider, scoreCandidate } from '@/core/providers/mock-verify';
+import type { CandidateLead } from '@/core/providers/types';
 
 const req = { companies: ['Marriott'], roles: ['Director of Sales'], region: 'Malaysia' };
+
+// A clean, well-formed candidate; override one field per case to isolate a signal.
+const cand = (over: Partial<CandidateLead> = {}): CandidateLead => ({
+  candidateKey: 'marriott:0',
+  name: 'Jane Doe',
+  company: 'Marriott',
+  title: 'Director of Sales',
+  email: 'jane.doe@marriott.com',
+  sourceUrl: 'https://marriott.com/team',
+  ...over,
+});
 
 describe('mock providers', () => {
   const discover = createMockDiscoverProvider();
@@ -50,5 +62,64 @@ describe('mock providers', () => {
     const empty = await discover.discover({ ...req, companies: [EMPTY_COMPANY] }, 'j');
     expect(empty.length).toBe(0);
     await expect(discover.discover({ ...req, companies: [FAIL_COMPANY] }, 'j')).rejects.toThrow();
+  });
+});
+
+// The score is a transparent feature sum, not randomness. These assert the exact
+// number AND that the evidence (factors) both justifies it and sums to it — so a
+// good lead scores demonstrably higher than a bad one, for a nameable reason.
+describe('lead scoring (feature-based, explainable)', () => {
+  it('is deterministic — identical input, identical score + factors', () => {
+    expect(scoreCandidate(cand())).toEqual(scoreCandidate(cand()));
+  });
+
+  it('factors sum to the score (clamped 0–100) — no hidden points', () => {
+    for (const c of [
+      cand(),
+      cand({ title: 'Chief Marketing Officer' }),
+      cand({ email: 'x@gmail.com' }),
+    ]) {
+      const { score, factors } = scoreCandidate(c);
+      expect(score).toBe(
+        Math.max(
+          0,
+          Math.min(
+            100,
+            factors.reduce((s, f) => s + f.points, 0),
+          ),
+        ),
+      );
+      expect(score).toBeGreaterThanOrEqual(0);
+      expect(score).toBeLessThanOrEqual(100);
+    }
+  });
+
+  it('scores a Head/Director lead at exactly 87 with attributable factors', () => {
+    const { score, factors } = scoreCandidate(cand());
+    expect(score).toBe(87); // 40 + 22 + 8 + 10 + 4 + 3
+    const labels = factors.map((f) => f.label);
+    expect(labels).toContain('Head / Director title');
+    expect(labels).toContain('Corporate domain');
+    expect(labels).toContain('Named mailbox (first.last)');
+  });
+
+  it('ranks seniority: C-level (100) > Director (87) > individual contributor (69)', () => {
+    expect(scoreCandidate(cand({ title: 'Chief Marketing Officer' })).score).toBe(100);
+    expect(scoreCandidate(cand({ title: 'Director of Sales' })).score).toBe(87);
+    expect(scoreCandidate(cand({ title: 'Sales Associate' })).score).toBe(69);
+  });
+
+  it('penalizes a public email provider, with the penalty visible as evidence', () => {
+    const corporate = scoreCandidate(cand());
+    const gmail = scoreCandidate(cand({ email: 'jane.doe@gmail.com' }));
+    expect(gmail.score).toBeLessThan(corporate.score);
+    expect(gmail.score).toBe(54); // 40 + 22 - 25 + 10 + 4 + 3
+    expect(gmail.factors).toContainEqual({ label: 'Public email provider', points: -25 });
+  });
+
+  it('penalizes a shared/role mailbox that survives the deliverability screen', () => {
+    const role = scoreCandidate(cand({ email: 'sales@marriott.com' }));
+    expect(role.score).toBe(62); // 40 + 22 + 8 - 15 + 4 + 3
+    expect(role.factors).toContainEqual({ label: 'Shared / role mailbox', points: -15 });
   });
 });

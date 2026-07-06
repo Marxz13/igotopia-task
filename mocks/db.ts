@@ -2,7 +2,17 @@
 // credit charging, idempotent replay, cross-org 404s, and timed job progression
 // (queued -> discovering -> verifying -> completed) derived from wall-clock time.
 
-import type { Job, Lead, LeadsQuery, LeadState, Me, Org, SearchRequest } from '@/core/contract';
+import type {
+  Job,
+  Lead,
+  LeadsQuery,
+  LeadState,
+  Me,
+  Org,
+  ScoreFactor,
+  SearchRequest,
+} from '@/core/contract';
+import { scoreCandidate } from '@/core/providers/mock-verify';
 
 // Fixed identities (valid UUIDs).
 const MARZLABS_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
@@ -36,6 +46,7 @@ interface MockLead {
   sourceUrl: string | null;
   state: LeadState;
   score: number | null;
+  scoreFactors: ScoreFactor[] | null;
   rejectionReason: string | null;
 }
 
@@ -131,11 +142,11 @@ function pick<T>(arr: readonly T[], r: number): T {
 }
 
 const FIRST_NAMES = [
-  'Jane',
-  'John',
-  'Aisha',
-  'Wei',
-  'Carlos',
+  'Marz',
+  'Lebron',
+  'Syamim',
+  'Ali',
+  'Daniel',
   'Priya',
   'Liam',
   'Nadia',
@@ -143,16 +154,16 @@ const FIRST_NAMES = [
   'Sara',
 ] as const;
 const LAST_NAMES = [
-  'Doe',
-  'Roe',
-  'Khan',
-  'Chen',
-  'Silva',
+  'Ladina',
+  'John',
+  'Cena',
+  'Michael',
+  'Jackson',
   'Patel',
-  'Ng',
+  'James',
   'Rahman',
   'Blake',
-  'Ortiz',
+  'Brown',
 ] as const;
 
 function slug(company: string): string {
@@ -182,17 +193,32 @@ function generateLeads(jobId: string, request: SearchRequest): MockLead[] {
       const email = junk
         ? `${r() < 0.5 ? 'noreply' : 'info'}@${domain}`
         : `${first.toLowerCase()}.${last.toLowerCase()}@${domain}`;
+      const name = `${first} ${last}`;
+      const sourceUrl = `https://${domain}/team`;
+      // Clean leads get the same feature-based score + evidence the BE verifier
+      // produces (shared scorer) — the mock never diverges from real behavior.
+      const scored = junk
+        ? null
+        : scoreCandidate({
+            candidateKey: `${slug(company)}:${i}`,
+            name,
+            company,
+            title: role,
+            email,
+            sourceUrl,
+          });
 
       leads.push({
         id: crypto.randomUUID(),
         jobId,
-        name: `${first} ${last}`,
+        name,
         company,
         title: role,
         email,
-        sourceUrl: `https://${domain}/team`,
+        sourceUrl,
         state: junk ? 'rejected' : 'verified',
-        score: junk ? null : 50 + Math.floor(r() * 50),
+        score: scored ? scored.score : null,
+        scoreFactors: scored ? scored.factors : null,
         rejectionReason: junk ? 'Disposable / role-based email address' : null,
       });
     }
@@ -398,6 +424,7 @@ function toContractLead(lead: MockLead, resolved: boolean): Lead {
       sourceUrl: lead.sourceUrl,
       state: lead.state,
       score: lead.score,
+      scoreFactors: lead.scoreFactors,
       rejectionReason: lead.rejectionReason,
     };
   }
@@ -412,6 +439,7 @@ function toContractLead(lead: MockLead, resolved: boolean): Lead {
     sourceUrl: lead.sourceUrl,
     state: 'unverified_raw',
     score: null,
+    scoreFactors: null,
     rejectionReason: null,
   };
 }

@@ -22,16 +22,18 @@ export const TONES: Record<Tone, ToneSpec> = {
   cancel: { fg: '#b54708', bg: '#fffaeb', bd: '#fedf89', glyph: '⊘', dashed: true },
 };
 
-export function badgeStyle(tone: Tone): CSSProperties {
+// `plain` drops the filled pill (no background, no border) for a flat, text-only
+// look — the glyph + colored label still carry the state.
+export function badgeStyle(tone: Tone, plain = false): CSSProperties {
   const t = TONES[tone];
   return {
     display: 'inline-flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '2px 9px',
+    padding: plain ? '2px 0' : '2px 9px',
     borderRadius: '8px',
-    border: `1px ${t.dashed ? 'dashed' : 'solid'} ${t.bd}`,
-    background: t.bg,
+    border: plain ? '1px solid transparent' : `1px ${t.dashed ? 'dashed' : 'solid'} ${t.bd}`,
+    background: plain ? 'transparent' : t.bg,
     color: t.fg,
     fontSize: '12px',
     fontWeight: 600,

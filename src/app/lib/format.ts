@@ -18,10 +18,10 @@ export function timeAgo(iso: string): string {
 
 // Job's companies, comma-joined.
 export function jobCriteria(job: Job): string {
-  return job.request.companies.join(', ') || '—';
+  return job.request.companies.join(', ') || '-';
 }
 
 export function percent(numerator: number, denominator: number): string {
-  if (denominator <= 0) return '—';
+  if (denominator <= 0) return '-';
   return `${Math.round((numerator / denominator) * 100)}%`;
 }

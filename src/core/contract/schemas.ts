@@ -59,7 +59,16 @@ export const jobSchema = z.object({
   createdAt: isoDateTime,
 });
 
-// A lead in the inbox. `score` is set only when verified; `rejectionReason` only when rejected.
+// One factor behind a score: a named signal and its points (e.g. { label: 'Head /
+// Director title', points: 22 }). A lead's score is just the sum of its factors,
+// clamped to 0-100 - so every point traces back to a signal, no black box.
+export const scoreFactorSchema = z.object({
+  label: z.string(),
+  points: z.number().int(),
+});
+
+// A lead in the inbox. `score` is set only when verified; `rejectionReason` only when
+// rejected. `scoreFactors` holds the per-signal breakdown behind `score` (null if unscored).
 export const leadSchema = z.object({
   id: uuid,
   jobId: uuid,
@@ -70,6 +79,7 @@ export const leadSchema = z.object({
   sourceUrl: z.string().url().nullable(),
   state: leadStateSchema,
   score: z.number().int().min(0).max(100).nullable(),
+  scoreFactors: z.array(scoreFactorSchema).nullable(),
   rejectionReason: z.string().nullable(),
 });
 

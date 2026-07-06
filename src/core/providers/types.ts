@@ -1,4 +1,4 @@
-import type { SearchRequest } from '@/core/contract';
+import type { ScoreFactor, SearchRequest } from '@/core/contract';
 
 // Swappable provider interfaces - a real SERP/email API implements the same shapes,
 // so the pipeline depends only on these, never on a concrete provider.
@@ -20,9 +20,11 @@ export interface DiscoverProvider {
   discover(input: SearchRequest, jobId: string): Promise<CandidateLead[]>;
 }
 
-// Discriminated result: a verified lead carries a score, a rejected one a reason.
-// (Superset of the base { ok, reason? } - adds score for inbox confidence.)
-export type VerifyResult = { ok: true; score: number } | { ok: false; reason: string };
+// Discriminated result: a verified lead carries a score plus the factors behind it
+// (each a named signal + its points); a rejected one carries a reason.
+// (Superset of the base { ok, reason? } - adds an explainable score for the inbox.)
+export type VerifyResult =
+  { ok: true; score: number; factors: ScoreFactor[] } | { ok: false; reason: string };
 
 export interface VerifyProvider {
   verify(candidate: CandidateLead): Promise<VerifyResult>;

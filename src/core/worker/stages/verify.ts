@@ -36,7 +36,7 @@ export async function runVerifyStage(jobId: string): Promise<void> {
       email: lead.email,
       sourceUrl: lead.sourceUrl,
     });
-    if (result.ok) await setLeadVerified(lead.id, result.score);
+    if (result.ok) await setLeadVerified(lead.id, result.score, result.factors);
     else await setLeadRejected(lead.id, result.reason);
   }
 

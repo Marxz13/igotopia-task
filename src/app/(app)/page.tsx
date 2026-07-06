@@ -72,7 +72,6 @@ export default function OverviewPage() {
           accent={credits <= 0 ? 'var(--danger)' : 'var(--brand)'}
           sub="1 credit per search"
           icon={<SparkIcon size={17} />}
-          iconBg="#fff4ed"
           iconFg="var(--brand)"
         />
         <KpiCard
@@ -80,7 +79,6 @@ export default function OverviewPage() {
           value={total}
           sub={`across ${jobs.length} search${jobs.length === 1 ? '' : 'es'}`}
           icon={<InboxIcon size={17} />}
-          iconBg="#eff4ff"
           iconFg="#2563eb"
         />
         <KpiCard
@@ -89,7 +87,6 @@ export default function OverviewPage() {
           accent="var(--success)"
           sub={`${rate} verified rate`}
           icon={<CheckIcon size={17} />}
-          iconBg="#ecfdf3"
           iconFg="var(--success)"
         />
         <KpiCard
@@ -98,7 +95,6 @@ export default function OverviewPage() {
           accent="var(--danger)"
           sub="filtered before outreach"
           icon={<CrossIcon size={15} />}
-          iconBg="#fef3f2"
           iconFg="#dc2626"
         />
       </div>
@@ -135,7 +131,6 @@ function KpiCard({
   value,
   sub,
   icon,
-  iconBg,
   iconFg,
   accent,
 }: {
@@ -143,7 +138,6 @@ function KpiCard({
   value: number;
   sub: string;
   icon: ReactNode;
-  iconBg: string;
   iconFg: string;
   accent?: string;
 }) {
@@ -162,8 +156,6 @@ function KpiCard({
           style={{
             width: 32,
             height: 32,
-            borderRadius: 9,
-            background: iconBg,
             color: iconFg,
             display: 'flex',
             alignItems: 'center',
@@ -270,7 +262,7 @@ function RecentSearches({
                   {timeAgo(j.createdAt)}
                 </div>
               </div>
-              <Badge tone={jobTone(j.status)} label={jobLabel(j.status)} />
+              <Badge tone={jobTone(j.status)} label={jobLabel(j.status)} plain />
               <button className="row-link" onClick={() => onView(j.id)}>
                 View
               </button>

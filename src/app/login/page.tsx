@@ -133,7 +133,7 @@ function SignInForm({ onSignIn }: { onSignIn: (email: string) => Promise<unknown
         </div>
       </div>
 
-      <div style={STEP_LABEL}>Step 1 — Sign in</div>
+      <div style={STEP_LABEL}>Step 1 - Sign in</div>
       <form onSubmit={submit} style={PANEL}>
         <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
           <legend
@@ -147,7 +147,7 @@ function SignInForm({ onSignIn }: { onSignIn: (email: string) => Promise<unknown
               marginBottom: 12,
             }}
           >
-            Demo login — no password
+            Demo login - no password
           </legend>
           <label htmlFor="ld-email" className="field-label">
             Email
@@ -194,7 +194,7 @@ function SignInForm({ onSignIn }: { onSignIn: (email: string) => Promise<unknown
             marginBottom: 10,
           }}
         >
-          Demo users — click to fill
+          Demo users - click to fill
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <DemoUser
@@ -272,7 +272,7 @@ function OrgPicker({
 
   return (
     <CenterShell>
-      <div style={STEP_LABEL}>Step 2 — Choose workspace</div>
+      <div style={STEP_LABEL}>Step 2 - Choose workspace</div>
       <div style={PANEL}>
         <h1 style={{ margin: '0 0 4px', fontSize: 20, fontWeight: 700 }}>
           Choose active workspace

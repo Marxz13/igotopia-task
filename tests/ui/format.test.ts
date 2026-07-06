@@ -6,8 +6,8 @@ describe('percent', () => {
   it('rounds a ratio and dashes a zero denominator', () => {
     expect(percent(3, 4)).toBe('75%');
     expect(percent(1, 3)).toBe('33%');
-    expect(percent(0, 0)).toBe('—');
-    expect(percent(5, 0)).toBe('—');
+    expect(percent(0, 0)).toBe('-');
+    expect(percent(5, 0)).toBe('-');
   });
 });
 

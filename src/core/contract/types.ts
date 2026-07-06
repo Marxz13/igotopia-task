@@ -7,6 +7,7 @@ import type {
   errorResponseSchema,
   jobSchema,
   leadSchema,
+  scoreFactorSchema,
   orgSchema,
   userSchema,
   meSchema,
@@ -26,6 +27,7 @@ export type JobStatus = z.infer<typeof jobStatusSchema>;
 export type LeadState = z.infer<typeof leadStateSchema>;
 export type Job = z.infer<typeof jobSchema>;
 export type Lead = z.infer<typeof leadSchema>;
+export type ScoreFactor = z.infer<typeof scoreFactorSchema>;
 export type Org = z.infer<typeof orgSchema>;
 export type User = z.infer<typeof userSchema>;
 export type Me = z.infer<typeof meSchema>;

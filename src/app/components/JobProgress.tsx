@@ -75,7 +75,7 @@ export function JobProgress({
             #{jobId.slice(0, 6)}
           </span>
         </div>
-        <Badge tone={jobTone(status)} label={jobLabel(status)} />
+        <Badge tone={jobTone(status)} label={jobLabel(status)} plain />
       </div>
 
       {active && (
@@ -211,7 +211,7 @@ export function JobProgress({
             {data?.error ?? 'The job failed.'}
           </div>
           <div style={{ marginTop: 6, fontSize: 12, color: 'var(--muted)' }}>
-            Last counts — discovered {discovered}, verified {verified}, rejected {rejected}.
+            Last counts - discovered {discovered}, verified {verified}, rejected {rejected}.
           </div>
           <button
             type="button"

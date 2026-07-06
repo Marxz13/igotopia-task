@@ -32,7 +32,15 @@ export default function AppLayout({ children }: { children: ReactNode }) {
       }}
     >
       <Sidebar />
-      <main style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+      <main
+        style={{
+          flex: 1,
+          minWidth: 0,
+          maxWidth: 1040,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
         <Topbar />
         <div id="ld-main" style={{ flex: 1, overflow: 'auto', padding: '2px 6px 44px' }}>
           <OrgScope activeOrgId={activeOrgId}>{children}</OrgScope>

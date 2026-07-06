@@ -97,7 +97,7 @@ export default function SearchPage() {
             <legend className="sr-only">Search criteria</legend>
             <div>
               <label htmlFor="ld-co" className="field-label">
-                Companies <span className="hint">— at least one, comma-separated</span>
+                Companies <span className="hint">- at least one, comma-separated</span>
               </label>
               <input
                 id="ld-co"
@@ -114,7 +114,7 @@ export default function SearchPage() {
             <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <label htmlFor="ld-roles" className="field-label">
-                  Roles <span className="hint">— comma-separated</span>
+                  Roles <span className="hint">- comma-separated</span>
                 </label>
                 <input
                   id="ld-roles"
@@ -127,7 +127,7 @@ export default function SearchPage() {
               </div>
               <div style={{ flex: 1, minWidth: 200 }}>
                 <label htmlFor="ld-region" className="field-label">
-                  Region <span className="hint">— free text</span>
+                  Region <span className="hint">- free text</span>
                 </label>
                 <input
                   id="ld-region"

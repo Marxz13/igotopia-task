@@ -11,6 +11,8 @@ import { Badge } from '@/app/components/Badge';
 
 type StatusFilter = 'all' | LeadState;
 
+const PAGE_SIZE = 10;
+
 // Fetches leads + jobs once, then filters client-side so filter changes are instant.
 // ?job=<id> preselects the job filter.
 export default function InboxPage() {
@@ -69,7 +71,30 @@ function InboxContent() {
     [jobs],
   );
 
-  const showing = `showing ${filtered.length} ${filtered.length === 1 ? 'lead' : 'leads'}`;
+  // Click the State header to sort: off -> asc -> desc -> off. Rank orders states by
+  // pipeline outcome (verified, then unverified, then rejected); desc reverses it.
+  const [stateSort, setStateSort] = useState<'asc' | 'desc' | null>(null);
+  const sorted = useMemo(() => {
+    if (!stateSort) return filtered;
+    const rank: Record<LeadState, number> = { verified: 0, unverified_raw: 1, rejected: 2 };
+    const s = [...filtered].sort((a, b) => rank[a.state] - rank[b.state]);
+    return stateSort === 'asc' ? s : s.reverse();
+  }, [filtered, stateSort]);
+
+  // Client-side pagination over the sorted, filtered leads. Page resets to 1 whenever
+  // the filters or sort change so you never land on an out-of-range page.
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [statusFilter, jobFilter, stateSort]);
+  const pageCount = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const current = Math.min(page, pageCount);
+  const pageLeads = sorted.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+
+  const rangeStart = filtered.length === 0 ? 0 : (current - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(current * PAGE_SIZE, filtered.length);
+  const showing =
+    filtered.length === 0
+      ? 'showing 0 leads'
+      : `showing ${rangeStart}–${rangeEnd} of ${filtered.length} ${filtered.length === 1 ? 'lead' : 'leads'}`;
 
   return (
     <Shell>
@@ -160,18 +185,87 @@ function InboxContent() {
                 <th scope="col">Name</th>
                 <th scope="col">Company</th>
                 <th scope="col">Title</th>
-                <th scope="col">State</th>
+                <th scope="col">Email</th>
+                <th
+                  scope="col"
+                  aria-sort={
+                    stateSort === 'asc' ? 'ascending' : stateSort === 'desc' ? 'descending' : 'none'
+                  }
+                >
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setStateSort((s) => (s === null ? 'asc' : s === 'asc' ? 'desc' : null))
+                    }
+                    title="Sort by state"
+                    style={{
+                      border: 0,
+                      background: 'transparent',
+                      cursor: 'pointer',
+                      padding: 0,
+                      font: 'inherit',
+                      letterSpacing: 'inherit',
+                      textTransform: 'inherit',
+                      color: 'inherit',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                    }}
+                  >
+                    State
+                    <span
+                      style={{ fontSize: 10, color: stateSort ? 'var(--brand)' : 'var(--muted-2)' }}
+                    >
+                      {stateSort === 'asc' ? '▲' : stateSort === 'desc' ? '▼' : '↕'}
+                    </span>
+                  </button>
+                </th>
                 <th scope="col" style={{ textAlign: 'right' }}>
                   Score
                 </th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((l) => (
+              {pageLeads.map((l) => (
                 <LeadRow key={l.id} lead={l} />
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {phase === 'ready' && pageCount > 1 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            padding: '12px 18px',
+            borderTop: '1px solid var(--hairline)',
+          }}
+        >
+          <span className="tnum" style={{ fontSize: 13, color: 'var(--muted)' }}>
+            Page {current} of {pageCount}
+          </span>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              className="btn-soft"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={current <= 1}
+            >
+              ← Prev
+            </button>
+            <button
+              type="button"
+              className="btn-soft"
+              onClick={() => setPage((p) => Math.min(pageCount, p + 1))}
+              disabled={current >= pageCount}
+            >
+              Next →
+            </button>
+          </div>
         </div>
       )}
     </Shell>
@@ -180,14 +274,49 @@ function InboxContent() {
 
 function LeadRow({ lead }: { lead: Lead }) {
   const verified = lead.state === 'verified';
+  const factors = lead.scoreFactors ?? [];
+  const hasEvidence = verified && lead.score !== null && factors.length > 0;
+  const isRejected = lead.state === 'rejected' && !!lead.rejectionReason;
+  const [open, setOpen] = useState(false);
+  const detailBelow = open && (hasEvidence || isRejected);
   return (
     <>
-      <tr style={{ borderBottom: lead.rejectionReason ? 'none' : '1px solid #f4f4f4' }}>
+      <tr style={{ borderBottom: detailBelow ? 'none' : '1px solid #f4f4f4' }}>
         <td style={{ padding: '12px 18px', fontWeight: 600 }}>{lead.name}</td>
         <td style={{ padding: '12px 18px', color: 'var(--ink-2)' }}>{lead.company}</td>
         <td style={{ padding: '12px 18px', color: 'var(--ink-2)' }}>{lead.title}</td>
         <td style={{ padding: '12px 18px' }}>
-          <Badge tone={leadTone(lead.state)} label={leadLabel(lead.state)} />
+          <a
+            href={`mailto:${lead.email}`}
+            className="mono"
+            style={{ fontSize: 12, color: verified ? 'var(--brand)' : 'var(--muted)' }}
+          >
+            {lead.email}
+          </a>
+        </td>
+        <td style={{ padding: '12px 18px' }}>
+          {isRejected ? (
+            <button
+              type="button"
+              onClick={() => setOpen((o) => !o)}
+              aria-expanded={open}
+              title="Show rejection reason"
+              style={{
+                border: 0,
+                background: 'transparent',
+                cursor: 'pointer',
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <Badge tone={leadTone(lead.state)} label={leadLabel(lead.state)} plain />
+              <span style={{ fontSize: 11, color: 'var(--muted-2)' }}>{open ? '▾' : '▸'}</span>
+            </button>
+          ) : (
+            <Badge tone={leadTone(lead.state)} label={leadLabel(lead.state)} plain />
+          )}
         </td>
         <td
           className="tnum"
@@ -198,12 +327,65 @@ function LeadRow({ lead }: { lead: Lead }) {
             fontWeight: verified ? 600 : 400,
           }}
         >
-          {verified && lead.score !== null ? `${lead.score} / 100` : '—'}
+          {hasEvidence ? (
+            <button
+              type="button"
+              onClick={() => setOpen((o) => !o)}
+              aria-expanded={open}
+              title="Show score breakdown"
+              className="tnum"
+              style={{
+                border: 0,
+                background: 'transparent',
+                cursor: 'pointer',
+                color: 'var(--ink)',
+                fontWeight: 600,
+                textDecoration: 'underline dotted',
+                textUnderlineOffset: 3,
+              }}
+            >
+              {lead.score} / 100 {open ? '▾' : '▸'}
+            </button>
+          ) : verified && lead.score !== null ? (
+            `${lead.score} / 100`
+          ) : (
+            '-'
+          )}
         </td>
       </tr>
-      {lead.state === 'rejected' && lead.rejectionReason && (
+      {hasEvidence && open && (
         <tr style={{ borderBottom: '1px solid #f4f4f4' }}>
-          <td colSpan={5} style={{ padding: '0 18px 12px 18px' }}>
+          <td colSpan={6} style={{ padding: '0 18px 14px' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, color: 'var(--muted-2)', marginRight: 2 }}>
+                Why {lead.score}:
+              </span>
+              {factors.map((f) => {
+                const pos = f.points >= 0;
+                return (
+                  <span
+                    key={f.label}
+                    style={{
+                      fontSize: 12,
+                      color: pos ? '#067647' : '#b42318',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {f.label}{' '}
+                    <span className="tnum" style={{ fontWeight: 700 }}>
+                      {pos ? '+' : ''}
+                      {f.points}
+                    </span>
+                  </span>
+                );
+              })}
+            </div>
+          </td>
+        </tr>
+      )}
+      {isRejected && open && (
+        <tr style={{ borderBottom: '1px solid #f4f4f4' }}>
+          <td colSpan={6} style={{ padding: '0 18px 12px 18px' }}>
             <span className="mono" style={{ fontSize: 12, color: 'var(--danger)' }}>
               reason: {lead.rejectionReason}
             </span>

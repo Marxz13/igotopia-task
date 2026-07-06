@@ -10,7 +10,7 @@ import {
   uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
-import type { SearchRequest } from '@/core/contract';
+import type { ScoreFactor, SearchRequest } from '@/core/contract';
 
 // Drizzle schema: the 7 tables backing tenancy, atomic credits, and idempotency.
 // The constraints are the real guarantees, not app code: CHECK(credits >= 0) and
@@ -122,6 +122,8 @@ export const leads = pgTable(
     sourceUrl: text('source_url'),
     state: text('state').notNull().default('unverified_raw'),
     score: integer('score'),
+    // Evidence trail behind `score` — the named signals + points that sum to it.
+    scoreFactors: jsonb('score_factors').$type<ScoreFactor[]>(),
     rejectionReason: text('rejection_reason'),
     candidateKey: text('candidate_key').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

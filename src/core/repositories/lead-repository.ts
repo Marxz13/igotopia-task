@@ -1,5 +1,5 @@
 import { and, count, desc, eq, type SQL } from 'drizzle-orm';
-import type { LeadsQuery } from '@/core/contract';
+import type { LeadsQuery, ScoreFactor } from '@/core/contract';
 import { getDb } from '@/core/db/client';
 import { leads, type LeadRow } from '@/core/db/schema';
 
@@ -50,17 +50,27 @@ export async function listUnverified(jobId: string): Promise<LeadRow[]> {
     .where(and(eq(leads.jobId, jobId), eq(leads.state, 'unverified_raw')));
 }
 
-export async function setLeadVerified(leadId: string, score: number): Promise<void> {
+export async function setLeadVerified(
+  leadId: string,
+  score: number,
+  scoreFactors: ScoreFactor[],
+): Promise<void> {
   await getDb()
     .update(leads)
-    .set({ state: 'verified', score, rejectionReason: null, updatedAt: new Date() })
+    .set({ state: 'verified', score, scoreFactors, rejectionReason: null, updatedAt: new Date() })
     .where(eq(leads.id, leadId));
 }
 
 export async function setLeadRejected(leadId: string, reason: string): Promise<void> {
   await getDb()
     .update(leads)
-    .set({ state: 'rejected', score: null, rejectionReason: reason, updatedAt: new Date() })
+    .set({
+      state: 'rejected',
+      score: null,
+      scoreFactors: null,
+      rejectionReason: reason,
+      updatedAt: new Date(),
+    })
     .where(eq(leads.id, leadId));
 }
 
