@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import type { ErrorResponse } from '@/core/contract';
 import { AppError, UnauthorizedError } from '@/core/errors';
 import { getLogger } from '@/core/logger';
+import { isMember } from '@/core/repositories/membership-repository';
 import {
   resolveSession,
   SESSION_COOKIE,
@@ -67,5 +68,11 @@ export async function requireSessionInfo(): Promise<SessionInfo> {
 export async function requireContext(): Promise<RequestContext> {
   const session = await requireSessionInfo();
   if (!session.activeOrgId) throw new UnauthorizedError('No active organization selected');
+  // Re-validate membership on every tenant request. A membership revoked mid-session
+  // must lose org access immediately, not linger for the 7-day session TTL. Treated as
+  // "no active org" (401) so the client is forced to re-pick.
+  if (!(await isMember(session.userId, session.activeOrgId))) {
+    throw new UnauthorizedError('No active organization selected');
+  }
   return { userId: session.userId, orgId: session.activeOrgId, sessionId: session.sessionId };
 }

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { startSearch } from '@/core/services/search-service';
+import { buildMe } from '@/core/services/auth-service';
 import { getJobById } from '@/core/repositories/job-repository';
 import { listLeadsByOrg } from '@/core/repositories/lead-repository';
 import { runDiscoverStage } from '@/core/worker/stages/discover';
@@ -111,5 +112,19 @@ describe('tenancy — cross-org access is 404 (invisible)', () => {
     expect(await getJobById(ALLANINC, jobId)).toBeNull(); // 404 mask
     expect((await listLeadsByOrg(ALLANINC, { jobId })).length).toBe(0);
     expect(await getJobById(MARZLABS, jobId)).not.toBeNull();
+  });
+});
+
+describe('stale membership — never advertise a revoked active org', () => {
+  it('buildMe nulls an activeOrgId the user is not a member of', async () => {
+    // MARZ belongs to Marz Labs only; a session pointing at Allan Inc is stale.
+    const me = await buildMe(MARZ, ALLANINC);
+    expect(me.activeOrgId).toBeNull();
+    expect(me.orgs.some((o) => o.id === ALLANINC)).toBe(false);
+  });
+
+  it('buildMe keeps an activeOrgId the user still belongs to', async () => {
+    const me = await buildMe(ALLAN, ALLANINC); // ALLAN is a member of Allan Inc
+    expect(me.activeOrgId).toBe(ALLANINC);
   });
 });

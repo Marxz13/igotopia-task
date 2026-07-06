@@ -13,10 +13,13 @@ export async function buildMe(userId: string, activeOrgId: string | null): Promi
   if (!user) throw new UnauthorizedError();
   const orgIds = await listOrgIdsForUser(userId);
   const orgs = await listOrgsByIds(orgIds);
+  // Never advertise an active org the user is no longer a member of (revoked
+  // mid-session): keep it consistent with the orgs[] list the UI renders.
+  const effectiveActiveOrgId = activeOrgId && orgIds.includes(activeOrgId) ? activeOrgId : null;
   return {
     user: { id: user.id, email: user.email, name: user.name },
     orgs: orgs.map((o) => ({ id: o.id, name: o.name, credits: o.credits })),
-    activeOrgId,
+    activeOrgId: effectiveActiveOrgId,
   };
 }
 
