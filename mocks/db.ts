@@ -5,10 +5,10 @@
 import type { Job, Lead, LeadsQuery, LeadState, Me, Org, SearchRequest } from '@/core/contract';
 
 // Fixed identities (valid UUIDs).
-const ACME_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
-const GLOBEX_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
-const ALICE_ID = 'a11ce000-0000-4000-8000-000000000001';
-const BOB_ID = 'b0b00000-0000-4000-8000-000000000001';
+const MARZLABS_ID = 'aaaaaaaa-0000-4000-8000-000000000001';
+const ALLANINC_ID = 'bbbbbbbb-0000-4000-8000-000000000001';
+const MARZ_ID = 'a1a1a1a1-0000-4000-8000-000000000001';
+const ALLAN_ID = 'a2a2a2a2-0000-4000-8000-000000000001';
 
 // Sentinel inputs for empty and failed outcomes.
 // A search containing one of these company names forces that outcome.
@@ -69,17 +69,17 @@ interface Store {
 function initialStore(): Store {
   return {
     orgs: new Map<string, Org>([
-      [ACME_ID, { id: ACME_ID, name: 'Acme', credits: 10 }],
-      [GLOBEX_ID, { id: GLOBEX_ID, name: 'Globex', credits: 1 }],
+      [MARZLABS_ID, { id: MARZLABS_ID, name: 'Marz Labs', credits: 10 }],
+      [ALLANINC_ID, { id: ALLANINC_ID, name: 'Allan Inc', credits: 1 }],
     ]),
     users: [
-      { id: ALICE_ID, email: 'alice@acme.test', name: 'Alice' },
-      { id: BOB_ID, email: 'bob@globex.test', name: 'Bob' },
+      { id: MARZ_ID, email: 'marz@test.com', name: 'Marz' },
+      { id: ALLAN_ID, email: 'allan@test.com', name: 'Allan' },
     ],
     memberships: [
-      { userId: ALICE_ID, orgId: ACME_ID },
-      { userId: BOB_ID, orgId: ACME_ID },
-      { userId: BOB_ID, orgId: GLOBEX_ID },
+      { userId: MARZ_ID, orgId: MARZLABS_ID },
+      { userId: ALLAN_ID, orgId: MARZLABS_ID },
+      { userId: ALLAN_ID, orgId: ALLANINC_ID },
     ],
     jobs: [],
     idempotency: new Map<string, string>(),

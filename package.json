@@ -12,6 +12,7 @@
     "start": "next start",
     "worker": "tsx scripts/worker.ts",
     "seed": "tsx scripts/seed.ts",
+    "db:generate": "drizzle-kit generate",
     "migrate": "drizzle-kit migrate",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -30,7 +31,10 @@
     ]
   },
   "dependencies": {
+    "drizzle-orm": "^0.45.2",
     "next": "^15.1.0",
+    "pino": "^10.3.1",
+    "postgres": "^3.4.9",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.0"
