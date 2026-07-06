@@ -1,0 +1,18 @@
+# Rebuilt inside the image
+node_modules
+.next
+
+# don't bake secrets or non-runtime stuff into the image
+.env
+.env.*
+.git
+.github
+docs
+tests
+coverage
+
+# Noise
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db

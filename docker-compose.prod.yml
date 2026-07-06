@@ -1,0 +1,113 @@
+# Production-like stack - same compose runs locally and on the VM.
+#   SESSION_SECRET=... docker compose -f docker-compose.prod.yml up --build
+# Then open http://localhost (Caddy :80 -> app). Postgres + Redis are internal
+# (no published ports). init runs migrate + seed once before app/worker start.
+# On a VM: set SITE_ADDRESS=your.domain for auto HTTPS via Caddy.
+name: lead-discovery-prod
+
+# Shared build/image for the three app roles (app / worker / init).
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  # Local builds lead-discovery:local. On VM/CI set APP_IMAGE=ghcr.io/owner/repo:tag,
+  # then `docker compose pull` + `up --no-build` to run the prebuilt image.
+  image: ${APP_IMAGE:-lead-discovery:local}
+
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgres://postgres:postgres@postgres:5432/lead_discovery
+  REDIS_URL: redis://redis:6379
+  SESSION_SECRET: ${SESSION_SECRET:-local-prod-secret-change-me-min16}
+  PROVIDER_MODE: mock
+  WORKER_CONCURRENCY: '5'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lead_discovery
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d lead_discovery']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # one-shot: run migrations + seed, then exit. In prod this is the expand
+  # (backward-compatible) migration run before the app cutover.
+  init:
+    <<: *app-image
+    environment: *app-env
+    command: sh -c 'npm run migrate && npm run seed'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+
+  app:
+    <<: *app-image
+    environment: *app-env
+    command: npm run start
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/api/health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  worker:
+    <<: *app-image
+    environment: *app-env
+    command: npm run worker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      init:
+        condition: service_completed_successfully
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      # Local: ':80' (plain HTTP). VM: set SITE_ADDRESS=your.domain for auto-TLS.
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:
