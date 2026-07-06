@@ -43,7 +43,7 @@ export async function startSearch(input: StartSearchInput): Promise<StartSearchR
     if (!jobRow) {
       // Duplicate submit: replay the one existing job, no second charge.
       const existing = await tx
-        .select({ id: jobs.id })
+        .select({ id: jobs.id, status: jobs.status })
         .from(jobs)
         .where(
           and(eq(jobs.organizationId, input.orgId), eq(jobs.idempotencyKey, input.idempotencyKey)),
@@ -51,7 +51,9 @@ export async function startSearch(input: StartSearchInput): Promise<StartSearchR
         .limit(1);
       const row = existing[0];
       if (!row) throw new Error('idempotency conflict with no existing job');
-      return { jobId: row.id, replayed: true };
+      // Report the existing job's REAL status (may already be discovering/completed),
+      // not a stale 'queued' — a client polling the replay must see backend truth.
+      return { jobId: row.id, status: row.status as JobStatus, replayed: true };
     }
 
     // 2. Atomic check-and-decrement: the WHERE credits >= 1 makes it indivisible
@@ -78,7 +80,7 @@ export async function startSearch(input: StartSearchInput): Promise<StartSearchR
       balanceAfter: chargedRow.credits,
     });
 
-    return { jobId: jobRow.id, replayed: false };
+    return { jobId: jobRow.id, status: 'queued' as JobStatus, replayed: false };
   });
 
   // 4. Enqueue AFTER commit (the enqueue-after-commit gap is covered by the sweeper).
@@ -89,5 +91,5 @@ export async function startSearch(input: StartSearchInput): Promise<StartSearchR
     'search started',
   );
 
-  return { jobId: result.jobId, status: 'queued', replayed: result.replayed };
+  return { jobId: result.jobId, status: result.status, replayed: result.replayed };
 }

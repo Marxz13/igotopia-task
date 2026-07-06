@@ -31,6 +31,25 @@ describe('POST /api/searches — atomic charge + idempotency', () => {
     expect(await ledgerCount(MARZLABS)).toBe(1);
   });
 
+  it('replay reports the existing job real status, not a stale queued', async () => {
+    const first = await startSearch({
+      orgId: MARZLABS,
+      userId: MARZ,
+      idempotencyKey: 'k1',
+      request: req,
+    });
+    await runDiscoverStage(first.jobId); // advance past 'queued' -> 'verifying'
+    const replay = await startSearch({
+      orgId: MARZLABS,
+      userId: MARZ,
+      idempotencyKey: 'k1',
+      request: req,
+    });
+    expect(replay.replayed).toBe(true);
+    expect(replay.status).not.toBe('queued');
+    expect(replay.status).toBe((await getJobById(MARZLABS, first.jobId))?.status);
+  });
+
   it('double-submit with the same key replays one job, no second charge', async () => {
     const first = await startSearch({
       orgId: MARZLABS,
