@@ -4,15 +4,18 @@ A small multi-tenant lead tool. A user submits who they want to find, the system
 two-stage background job (**discover → verify**), and the results land in an inbox they can
 review. Each organization only ever sees its own jobs and leads.
 
+> **Live demo:** https://gecko.marzallan.com, sign in with `marz@test.com` (passwordless).
+
 ---
 
 ## What it does
 
 - Sign in as a demo user and pick a workspace (organization).
 - Start a search (companies, roles, region). This costs **1 credit** and returns a `job_id`
-  right away, with no waiting on the HTTP request.
+  immediately (**HTTP 202**); the pipeline runs in the background.
 - A background worker finds candidate leads, then verifies each one (approve or reject).
-- Watch the job progress live, then browse the leads in an inbox and filter by status.
+- Watch the job progress live with an activity log, **cancel** an in-flight job, then browse the
+  leads in an inbox and filter by status.
 
 ---
 
@@ -26,7 +29,7 @@ review. Each organization only ever sees its own jobs and leads.
 | Queue      | Redis + BullMQ (two queues: discover, verify)    |
 | Validation | Zod, one shared contract for API + worker + UI   |
 | Logging    | Pino (structured JSON logs)                      |
-| Tests      | Vitest (54 tests)                                |
+| Tests      | Vitest (62 tests)                                |
 | Dev mock   | MSW for the frontend (off by default)            |
 | Tooling    | ESLint, Prettier, Husky, commitlint, drizzle-kit |
 
@@ -70,8 +73,8 @@ flowchart LR
     U -->|"GET /api/jobs/:id (poll)"| API
 ```
 
-**Job states:** `queued → discovering → verifying → completed` (or `failed`). `cancelled` is
-modelled as a terminal state but not wired to a button (it was optional).
+**Job states:** `queued → discovering → verifying → completed` (or `failed`). A user can
+**cancel** an in-flight job from the UI (any non-terminal state → `cancelled`).
 
 **Lead states:** `unverified_raw` → `verified` or `rejected` (with a `rejection_reason`).
 
@@ -81,7 +84,8 @@ modelled as a terminal state but not wired to a button (it was optional).
 
 - **Multi-tenant.** Every job, lead, and credit row carries an `organization_id`. The org is
   read only from the session, never from the request body, so one org can't reach another
-  org's data. A cross-org `job_id` or `lead_id` returns **404**, not the row.
+  org's data. A cross-org `job_id` returns **404**, not the row; leads are only ever listed
+  org-scoped, so another org's leads never appear in the inbox.
 - **Credits.** Each search costs 1 credit. The credit charge and the job creation happen in a
   **single database transaction**, so a failed charge rolls the whole thing back. Double-clicking
   submit spends only 1 credit (idempotency key + unique constraint).
@@ -91,6 +95,13 @@ modelled as a terminal state but not wired to a button (it was optional).
 - **Idempotent + restart-safe.** Re-running a job (or a worker crash after discover) never
   duplicates leads. See [Idempotency & recovery](#idempotency--recovery).
 - **Errors surface.** A failed job stores its error and the UI shows it.
+- **Cancel.** An in-flight job can be cancelled from the UI. Status advances are conditional
+  updates (`WHERE status = <from>`), so the worker never clobbers a cancel; it also checks for
+  cancellation during its stage pause, so the pipeline stops cleanly mid-run.
+- **Activity log.** Every job keeps a per-run timeline (`queued`, `discovering`, `discovered N`,
+  `verifying`, `completed`, plus `crashed` / `recovered` / `retry` / `cancelled`), appended by the
+  backend (worker for the stage events, API for `queued` / `cancelled`) and shown live under the
+  progress card. A crash + recovery shows as two discovery passes.
 - **Explainable scoring (extra).** A verified lead gets a 0-100 score built from named factors
   (title seniority, corporate domain, named mailbox, etc.), not a black-box number.
 
@@ -106,7 +117,8 @@ later; see [Plugging in a real provider](#plugging-in-a-real-provider).
 
 - Deterministic: seeded by `job_id`, so the same job always produces the same candidates. This is
   what makes runs testable and re-runs safe.
-- Produces 3-5 contacts per company, with varied names and titles.
+- Produces 3-5 contacts per company with varied names; titles cycle through the roles you searched.
+  Capped at 50 candidates per job (the brief's 0-50 range).
 - Always includes at least one **junk email** per company (`info@…` or `noreply@…`) so the verify
   step has something to reject.
 - Two test sentinels you can type as a company name:
@@ -177,17 +189,18 @@ verify.
 ## Tests
 
 ```bash
-npm test        # all 54 tests (backend tests need Postgres + Redis running)
+npm test        # all 62 tests (backend tests need Postgres + Redis running)
 npm run test:ui # pure logic + frontend only, no database
 ```
 
 They cover the parts most likely to break: atomic credit charge, double-submit, cross-org
-isolation, the discover/verify state machine, crash-and-restart with no duplicate leads, mock
+isolation, the discover/verify state machine, crash-and-restart with no duplicate leads, cancel
+(including cancel mid-stage without clobbering it), the activity-log event sequence, mock
 providers, and the scoring logic.
 
 ---
 
-## How the tricky parts work
+## How the parts work
 
 ### Multi-tenancy
 
@@ -197,7 +210,7 @@ The active organization lives on the **session row**, not in the request. Every 
 re-checked on every request, so access revoked mid-session stops right away instead of lasting
 until the cookie expires.
 
-### Credits (no double-spend)
+### Credits
 
 `startSearch` runs one Postgres transaction that:
 
@@ -237,6 +250,11 @@ interface VerifyProvider {
 }
 ```
 
+These deliberately extend the brief's interface: `discover` also takes `jobId` (seeds the
+deterministic mock so a re-run regenerates identical candidates, the load-bearing crash-idempotency
+property), and `VerifyResult` is a superset of `{ ok, reason? }` that also carries the `score` +
+`factors` behind an approval, for the explainable-scoring extra.
+
 To use a real one:
 
 1. Implement `createRealDiscoverProvider` / `createRealVerifyProvider` in
@@ -250,22 +268,48 @@ To use a real one:
 
 ## Environment variables
 
-| Variable                | Default                  | What it's for                                 |
-| ----------------------- | ------------------------ | --------------------------------------------- |
-| `DATABASE_URL`          | local Postgres           | Postgres connection string                    |
-| `REDIS_URL`             | local Redis              | Redis connection string                       |
-| `POSTGRES_PORT`         | `5432`                   | Host port for the Postgres container          |
-| `REDIS_PORT`            | `6379`                   | Host port for the Redis container             |
-| `SESSION_SECRET`        | `change-me-in-local-env` | Signs the session cookie (use a long value)   |
-| `PROVIDER_MODE`         | `mock`                   | `mock` or `real`                              |
-| `WORKER_CONCURRENCY`    | `5`                      | Jobs processed at once per stage              |
-| `CRASH_AFTER_DISCOVER`  | `0`                      | Set to `1` to demo crash recovery             |
-| `NEXT_PUBLIC_USE_MOCKS` | `false`                  | Use the MSW frontend mock instead of real API |
+| Variable                | Default        | What it's for                                                                    |
+| ----------------------- | -------------- | -------------------------------------------------------------------------------- |
+| `DATABASE_URL`          | local Postgres | Postgres connection string                                                       |
+| `REDIS_URL`             | local Redis    | Redis connection string                                                          |
+| `POSTGRES_PORT`         | `5432`         | Host port for the Postgres container                                             |
+| `REDIS_PORT`            | `6379`         | Host port for the Redis container                                                |
+| `SESSION_SECRET`        | _(required)_   | Signs the session cookie; min 16 chars, no code default; set a long random value |
+| `PROVIDER_MODE`         | `mock`         | `mock` or `real`                                                                 |
+| `WORKER_CONCURRENCY`    | `5`            | Jobs processed at once per stage                                                 |
+| `STAGE_DELAY_MS`        | `0`            | Pause per stage (ms); `.env` sets `2000` so progress and cancel are watchable    |
+| `QUEUE_PREFIX`          | `bull`         | BullMQ key prefix (tests use a separate prefix so a dev worker can't race them)  |
+| `CRASH_AFTER_DISCOVER`  | `0`            | Set to `1` to demo crash recovery                                                |
+| `NEXT_PUBLIC_USE_MOCKS` | `false`        | Use the MSW frontend mock instead of real API                                    |
+| `NODE_ENV`              | `development`  | `development` / `test` / `production`                                            |
 
 ---
 
-## Production hardening / next steps
+## Production next steps
 
-_To be written by the owner._
+Out of scope for the take-home; what I'd actually do for a real deployment.
 
-<!-- TODO: fill in the "what I'd add for production" notes here. -->
+**Cost.** With a real scraper the bill is proxy bytes, not servers: rotating residential IPs billed
+per GB. So push as few bytes as possible through the pricey ones: cache scrapes keyed by query with a
+TTL, shared across orgs (repeat searches are the biggest save); use plain HTTP + a parser instead of
+headless whenever the page doesn't need JS, and block images/fonts when it does; try cheap datacenter
+IPs first and fall back to residential only on a block (~10x on the bill); be polite per domain to
+get blocked less.
+
+**Deploy.** Let the real pain point drive each step, not a schedule:
+
+1. **Blue-green on the single box**, two compose stacks behind Caddy: bring the new one up,
+   health-check, flip, keep the old warm for one-command rollback. Removes the current
+   recreate-the-stack downtime; safe because the worker drains on SIGTERM and inserts are idempotent.
+   Needs backward-compatible migrations (add first, drop later) since both colours share the DB.
+2. **Postgres + Redis off the box** onto RDS/ElastiCache, a DB on one VM is the scariest thing here;
+   worth more than any deploy polish.
+3. **Pull the worker out and autoscale on queue depth** (spot) when one box can't keep up; the web
+   side barely grows since polling stops on terminal, and a killed job just re-runs cleanly.
+4. **Kubernetes only** if this grows into enough services to justify it; ECS/Fargate or Nomad goes a
+   long way for one app + one worker.
+
+**Also:** transactional outbox to replace the sweeper; rate limiter + circuit breaker around the real
+provider; partition the leads table once large; real metrics (queue lag, cost per job, cache hit
+rate) with alerting; credit prices matching real cost + per-org rate limit; proper auth (passwords or
+SSO + CSRF).
